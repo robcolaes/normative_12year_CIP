@@ -126,7 +126,7 @@ thickness_z <- thickness_z[,c("SubjectID", "age", "sex", "group",
 Insert maternal education & age
 
 ```{r}
-general <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/4_Characteristics/Output/list_general_all.csv")
+general <- read.csv("PATH/list_general_all.csv")
 general <- general[,c("ID","Education_mother_binary","Age_mother_at_birth_this_child")]
 colnames(general) <- c("SubjectID","Education_mother_binary","Maternal_age")
 general$Education_mother_binary <- as.factor(general$Education_mother_binary)
@@ -518,7 +518,7 @@ write.csv(ALL_SIGN, "Results/Sensitivity_Analyses/Covariates/Significant_regions
 ## 5. Repeat for Euler number
 
 ```{r}
-euler <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/2_Quality_Control/1_QC_FINAL/euler_numbers.txt", sep = " ")
+euler <- read.csv("PATH/euler_numbers.txt", sep = " ")
 colnames(euler) <- c("SubjectID","Euler_LH","Euler_RH")
 ```
 
