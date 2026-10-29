@@ -8,8 +8,6 @@ date: "2024-06-28"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# IMPORTANT: DON'T RERUN, WILL SLIGHTLY CHANGE NUMBERS, LOAD IN OLD RESULTS!!!!
-
 ## 0. Data and libraries
 
 ```{r}
@@ -54,13 +52,13 @@ regions <- merge(regions,global,by="SubjectID")
 Cognitive and behavioral data:
 
 ```{r}
-IQ <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/4_Characteristics/Output/list_IQ.csv")
+IQ <- read.csv("PATH/list_IQ.csv")
 IQ <- IQ[,c("ID","Total_IQ","VCI","PSI")]
 
-BRIEF <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/4_Characteristics/Output/list_BRIEF.csv")
+BRIEF <- read.csv("PATH/list_BRIEF.csv")
 BRIEF <- BRIEF[,c("ID","Behavioral_regulation_Tscore","Metacognition_Tscore", "Global_executive_composite_Tscore")]
 
-CBCL <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/4_Characteristics/Output/list_CBCL.csv")
+CBCL <- read.csv("PATH/list_CBCL.csv")
 ```
 
 ```{r}
@@ -69,15 +67,11 @@ FINAL <- merge(FINAL,BRIEF,by.x="SubjectID",by.y="ID")
 FINAL <- merge(FINAL,CBCL,by.x="SubjectID",by.y="ID")
 ```
 
-**(!) For now, maybe only look within CIP (!)**
 
 ```{r}
 FINAL <- FINAL[FINAL$Group=="C",]
 ```
 
-```{r}
-#colnames(FINAL) <- c("Left Pars Triangularis (SA)","Left Frontal Pole (CT)","Left Lateral Orbitofrontal (CT)","Left Superior Parietal (CT)","Right Caudal Middle Frontal (CT)","Right Superior Parietal (CT)","Total IQ","VCI","PSI","BRIEF Behavioral regulation","BRIEF Metacognition","BRIEF Global executive composite","CBCL Internalizing problems","CBCL Externalizing problems","CBCL Total problems")
-```
 
 ## 2. Elastic net regularization
 
