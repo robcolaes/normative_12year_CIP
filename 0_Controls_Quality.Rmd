@@ -38,15 +38,15 @@ library(reticulate)
 ```
 
 ```{r}
-thickness <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Output/Thickness/zscores.csv")
+thickness <- read.csv("PATH/zscores.csv")
 thickness <- thickness[thickness$group=="HC",]
 thickness <- thickness[,c(1:75)]
 
-surface <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Output/Area/zscores.csv")
+surface <- read.csv("PATH/zscores.csv")
 surface <- surface[surface$group=="HC",]
 surface <- surface[,c(1:75)]
 
-lobes <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Output/Components_Lobes/zscores.csv")
+lobes <- read.csv("PATH/zscores.csv")
 lobes <- lobes[lobes$group=="HC",]
 ```
 
@@ -203,7 +203,7 @@ pooled_summary_all <- bind_rows(
 ## 2. Feature table
 
 ```{r}
-selected_regions <- read.csv("Results/Risk_Factors/Selected_regions_z.csv")
+selected_regions <- read.csv("PATH/Selected_regions_z.csv")
 selected_regions <- selected_regions[selected_regions$group=="HC",]
 ```
 
@@ -268,12 +268,12 @@ qqplots
 ## 4. Output
 
 ```{r}
-write.csv(pooled_summary_all, file = "/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Results/Controls_Quality/pooled_summary.csv")
-write.csv(region_summary, file = "/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Results/Controls_Quality/selected_region_summary.csv")
+write.csv(pooled_summary_all, file = "PATH/pooled_summary.csv")
+write.csv(region_summary, file = "PATH/selected_region_summary.csv")
 ```
 
 ```{r}
-ggsave(qqplots,filename="/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Figures/Controls_Quality/qqplots.png",dpi=1200, width = 10, height=7)
+ggsave(qqplots,filename="PATH/qqplots.png",dpi=1200, width = 10, height=7)
 
-ggsave(qqplots,filename="/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Figures/Controls_Quality/qqplots.pdf",dpi=1200, width = 10, height=7)
+ggsave(qqplots,filename="PATH/qqplots.pdf",dpi=1200, width = 10, height=7)
 ```
