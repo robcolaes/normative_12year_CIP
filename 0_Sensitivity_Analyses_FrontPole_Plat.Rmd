@@ -104,9 +104,9 @@ FrontalPole_plot
 ```
 
 ```{r}
-ggsave(FrontalPole_plot,filename="/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Figures/FrontalPole/FrontalPole.png", dpi=1200)
+ggsave(FrontalPole_plot,filename="PATH/FrontalPole.png", dpi=1200)
 
-ggsave(FrontalPole_plot,filename="/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Figures/FrontalPole/FrontalPole.pdf", dpi=1200)
+ggsave(FrontalPole_plot,filename="PATH/FrontalPole.pdf", dpi=1200)
 ```
 
 ## 3. Platinum findings - Leave-one-out analysis
@@ -238,7 +238,7 @@ LateralOrb_Plat_plot
 ```
 
 ```{r}
-ggsave(FrontalPole_Plat_plot,filename="/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Figures/Platinum/FrontalPole.png", dpi=1200)
+ggsave(FrontalPole_Plat_plot,filename="PATH/FrontalPole.png", dpi=1200)
 
 ggsave(LateralOrb_Plat_plot,filename="/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Figures/Platinum/LaterlOrb.png", dpi=1200)
 ```
