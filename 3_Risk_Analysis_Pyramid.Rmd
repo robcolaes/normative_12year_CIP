@@ -73,7 +73,7 @@ vars <- c("lh_parstriangularis_area","lh_frontalpole_thickness","lh_lateralorbit
 ## 1. General risk factors
 
 ```{r}
-general <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/4_Characteristics/Output/list_general_all.csv")
+general <- read.csv("PATH/list_general_all.csv")
 general$Maternal_death <- as.factor(general$Maternal_death)
 general$Education_mother_binary <- as.factor(general$Education_mother_binary)
 general$Prematurity <- ifelse(general$GA_correct < 37, 1, 0)
@@ -320,7 +320,7 @@ GA_mdeath <- general[,c("ID","GA_correct","Maternal_death","Education_mother_bin
 ```
 
 ```{r}
-treat <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/4_Characteristics/Output/list_treatment.csv")
+treat <- read.csv("PATH/list_treatment.csv")
 regions_select_CIP_treat <- merge(regions_select_CIP,treat,by.x="SubjectID",by.y="ID")
 regions_select_CIP_treat <- merge(regions_select_CIP_treat,GA_mdeath,by.x="SubjectID",by.y="ID")
 ```
@@ -342,7 +342,7 @@ regions_select_CIP_treat$treatment_during_preg_NoTreatment <- relevel(regions_se
 ```
 
 ```{r}
-matd <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/4_Characteristics/Output/list_maternaldeath.csv")
+matd <- read.csv("PATH/list_maternaldeath.csv")
 ```
 
 ```{r}
@@ -578,7 +578,7 @@ Patient_NoTreatment_df
 ## 3. Chemotherapy - Risk factors
 
 ```{r}
-chemo <- read_xlsx("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/1_RedCap/Data_clean/Chemo_regimen/CT.xlsx")
+chemo <- read_xlsx("PATH/CT.xlsx")
 chemo <- chemo[,c(2,3,8:13,18)]
 chemo$Platinum <- as.factor(chemo$Platinum)
 chemo$Taxanen <- as.factor(chemo$Taxanen)
