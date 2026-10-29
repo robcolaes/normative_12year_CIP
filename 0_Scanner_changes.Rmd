@@ -38,22 +38,17 @@ library(reticulate)
 ```
 
 ```{r}
-thickness <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Output/Thickness/zscores.csv")
+thickness <- read.csv("PATH/zscores.csv")
 thickness <- thickness[,c("SubjectID","age","sex","group","lh_frontalpole_thickness")]
 ```
 
 ```{r}
-#qc <- read_xlsx("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/2_Quality_Control/1_QC_FINAL/group_T1w.xlsx")
-#qc <- qc[,c("ID","snr_total")] 
-```
-
-```{r}
-euler <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/2_Quality_Control/1_QC_FINAL/euler_numbers.txt", sep = " ")
+euler <- read.csv("PATH/euler_numbers.txt", sep = " ")
 colnames(euler) <- c("ID","Euler_LH","Euler_RH")
 ```
 
 ```{r}
-MRI <- read_xlsx("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/CIP_MRI_DATA.xlsx")
+MRI <- read_xlsx("PATH/DATA.xlsx")
 MRI <- MRI[MRI$Session=="T1",c("ID","Scan-date")]
 colnames(MRI) <- c("ID","Scan_date")
 ```
@@ -110,8 +105,8 @@ eulerright
 ```
 
 ```{r}
-ggsave(eulerleft, filename="/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Figures/Scanner_Changes/eulerleft.png",dpi=1200, width = 10, height=7)
-ggsave(eulerright, filename="/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Figures/Scanner_Changes/eulerright.png",dpi=1200, width = 10, height=7)
+ggsave(eulerleft, filename="PATH/eulerleft.png",dpi=1200, width = 10, height=7)
+ggsave(eulerright, filename="PATH/eulerright.png",dpi=1200, width = 10, height=7)
 ```
 
 ## 2. Spearman correlation
