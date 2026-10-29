@@ -1,0 +1,230 @@
+---
+title: "Brain3D"
+output: html_document
+date: "2024-06-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# GGSEG3D VISUALIZE
+
+## 0. Data and libraries
+
+```{r}
+library(ggplot2)
+library(MASS)
+library(corrplot)
+library(BBmisc)
+library(lmerTest)
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(viridis)
+library(ggpubr)
+library(cluster)
+library(stringr)
+library(factoextra)
+library(broom)
+library(readxl)
+library(performance)
+library(emmeans)
+library(influence.ME)
+library(rstatix)
+library(ggseg)
+library(ggseg3d)
+library(reticulate)
+```
+
+## 1. Visualize volumes
+
+Select atlas, which hemisphere, and how the surface needs to be presented:
+
+```{r}
+atlas_data_left <- dk_3d %>%
+  filter(surf == "inflated" & hemi == "left") %>%
+  unnest(ggseg_3d) %>%
+  ungroup() %>%
+  select(region) %>%
+  na.omit() %>%
+  filter(!region %in% c("corpus callosum")) # needs to be removed
+
+atlas_data_right <- dk_3d %>%
+  filter(surf == "inflated" & hemi == "right") %>%
+  unnest(ggseg_3d) %>%
+  ungroup() %>%
+  select(region) %>%
+  na.omit() %>%
+  filter(!region %in% c("corpus callosum")) # needs to be removed
+```
+
+```{r}
+# This has no use, copied it from other R script just to check
+mycols <- c(
+  "lh_parstriangularis_area"           = "#e40303", 
+  "lh_frontalpole_thickness"           = "#ff8c00", 
+  "lh_lateralorbitofrontal_thickness"  = "#ffed00", 
+  "lh_superiorparietal_thickness"      = "#008026", 
+  "rh_caudalmiddlefrontal_thickness"   = "#004dff", 
+  "rh_superiorparietal_thickness"      = "#750787"
+)
+```
+
+```{r}
+atlas_data_left$ind <- 0
+atlas_data_left[atlas_data_left$region=="pars triangularis",]$ind <- 1
+atlas_data_left[atlas_data_left$region=="frontal pole",]$ind <- 2
+atlas_data_left[atlas_data_left$region=="lateral orbitofrontal",]$ind <- 3
+atlas_data_left[atlas_data_left$region=="superior parietal",]$ind <- 4
+
+atlas_data_right$ind <- 0
+atlas_data_right[atlas_data_right$region=="caudal middle frontal",]$ind <- 5
+atlas_data_right[atlas_data_right$region=="superior parietal",]$ind <- 6
+```
+
+### 1.1. Left Hemisphere
+
+**MAKE SURE IT OVERLAPS THE COLORS!!**
+
+```{r}
+highlight_LH_lat <- ggseg3d(.data = atlas_data_left,
+        atlas = dk_3d,
+        colour = "ind",
+        text = "ind", na.colour = "#f0efeb",
+        palette = c("#f0efeb" = 0, "#e40303" = 1, "#ff8c00" = 2, "#ffed00" = 3 , "#008026" = 4)) %>% 
+  pan_camera("left lateral") %>% remove_axes() 
+highlight_LH_lat
+```
+
+```{r}
+highlight_LH_med <- ggseg3d(.data = atlas_data_left,
+        atlas = dk_3d,
+        colour = "ind",
+        text = "ind", na.colour = "#f0efeb",
+        palette = c("#f0efeb" = 0, "#e40303" = 1, "#ff8c00" = 2, "#ffed00" = 3 , "#008026" = 4)) %>% 
+  pan_camera("left medial") %>% remove_axes() 
+highlight_LH_med
+```
+
+### 1.2. Right Hemisphere
+
+```{r}
+highlight_RH_lat <- ggseg3d(.data = atlas_data_right,
+        atlas = dk_3d,
+        colour = "ind",
+        text = "ind", na.colour = "#f0efeb",
+        palette = c("#f0efeb" = 0, "#004dff" = 5, "#750787" = 6)) %>% 
+  pan_camera("right lateral") %>% remove_axes() 
+highlight_RH_lat
+```
+
+```{r}
+highlight_RH_med <- ggseg3d(.data = atlas_data_right,
+        atlas = dk_3d,
+        colour = "ind",
+        text = "ind", na.colour = "#f0efeb",
+        palette = c("#f0efeb" = 0, "#004dff" = 5, "#750787" = 6)) %>% 
+  pan_camera("right medial") %>% remove_axes() 
+highlight_RH_med
+```
+
+### 1.3. Frontal
+
+```{r}
+highlight_LH_FRONTAL <- ggseg3d(.data = atlas_data_left,
+        atlas = dk_3d,
+        colour = "ind",
+        text = "ind", na.colour = "#f0efeb",
+        palette = c("#f0efeb" = 0, "#e40303" = 1, "#ff8c00" = 2, "#ffed00" = 3 , "#008026" = 4, "#004dff" = 5, "#750787" = 6)) %>% 
+  pan_camera(
+    camera = list(
+      eye = list(x = 0.0, y = 1.9, z = -0.5),
+      up  = list(x = 0.0, y = 0.0, z = 1.0)
+    )
+  ) %>% remove_axes() 
+highlight_LH_FRONTAL
+```
+
+```{r}
+highlight_RH_FRONTAL <- ggseg3d(.data = atlas_data_right,
+        atlas = dk_3d,
+        colour = "ind",
+        text = "ind", na.colour = "#f0efeb",
+        palette = c("#f0efeb" = 0, "#e40303" = 1, "#ff8c00" = 2, "#ffed00" = 3 , "#008026" = 4, "#004dff" = 5, "#750787" = 6)) %>% 
+  pan_camera(
+    camera = list(
+      eye = list(x = 0.0, y = 1.9, z = -0.5),
+      up  = list(x = 0.0, y = 0.0, z = 1.0)
+    )
+  ) %>% remove_axes() 
+highlight_RH_FRONTAL
+```
+
+### 1.4. Caudal
+
+```{r}
+highlight_LH_CAUDAL <- ggseg3d(.data = atlas_data_left,
+        atlas = dk_3d,
+        colour = "ind",
+        text = "ind", na.colour = "#f0efeb",
+        palette = c("#f0efeb" = 0, "#e40303" = 1, "#ff8c00" = 2, "#ffed00" = 3 , "#008026" = 4, "#004dff" = 5, "#750787" = 6)) %>% 
+  pan_camera(
+    camera = list(
+      eye = list(x = 0.0, y = -1.9, z = 0.5),
+      up  = list(x = 0.0, y = 0.0, z = 1.0)
+    )
+  ) %>% remove_axes() 
+highlight_LH_CAUDAL
+```
+
+```{r}
+highlight_RH_CAUDAL <- ggseg3d(.data = atlas_data_right,
+        atlas = dk_3d,
+        colour = "ind",
+        text = "ind", na.colour = "#f0efeb",
+        palette = c("#f0efeb" = 0, "#e40303" = 1, "#ff8c00" = 2, "#ffed00" = 3 , "#008026" = 4, "#004dff" = 5, "#750787" = 6)) %>% 
+  pan_camera(
+    camera = list(
+      eye = list(x = 0.0, y = -1.9, z = 0.5),
+      up  = list(x = 0.0, y = 0.0, z = 1.0)
+    )
+  ) %>% remove_axes() 
+highlight_RH_CAUDAL
+```
+
+## 2. Save images
+
+Save images =\> **ORCA** needs to be downloaded and installed for this.
+
+```{r}
+plotly::orca(highlight_LH_lat, "Figures/Brain3D_SIGN/highlight_LH_lat.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(highlight_LH_med, "Figures/Brain3D_SIGN/highlight_LH_med.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(highlight_RH_lat, "Figures/Brain3D_SIGN/highlight_RH_lat.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(highlight_RH_med, "Figures/Brain3D_SIGN/highlight_RH_med.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(highlight_LH_FRONTAL, "Figures/Brain3D_SIGN/highlight_LH_FRONTAL.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(highlight_RH_FRONTAL, "Figures/Brain3D_SIGN/highlight_RH_FRONTAL.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(highlight_LH_CAUDAL, "Figures/Brain3D_SIGN/highlight_LH_CAUDAL.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(highlight_RH_CAUDAL, "Figures/Brain3D_SIGN/highlight_RH_CAUDAL.png", width = 3000, height = 2000)
+```

@@ -1,0 +1,244 @@
+---
+title: "SOCIAL"
+output: html_document
+date: "2024-06-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# SCANNER CHANGES OVER TIME
+
+## 0. Data and libraries
+
+```{r}
+library(ggplot2)
+library(MASS)
+library(corrplot)
+library(BBmisc)
+library(lmerTest)
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(viridis)
+library(ggpubr)
+library(cluster)
+library(stringr)
+library(factoextra)
+library(broom)
+library(readxl)
+library(performance)
+library(emmeans)
+library(influence.ME)
+library(rstatix)
+library(ggseg)
+library(ggseg3d)
+library(reticulate)
+library(effsize)  # for cohen.d() with confidence intervals
+```
+
+```{r}
+thickness_z <- read.csv("Output/Thickness/zscores.csv")
+thickness_z$group <- as.factor(thickness_z$group)
+```
+
+```{r}
+thickness_z <- thickness_z[,c("SubjectID", "age", "sex", "group",
+"lh_lateralorbitofrontal_thickness", "lh_frontalpole_thickness")]
+```
+
+## 1. Frontal pole - Leave-one-out analysis
+
+```{r}
+loo_results <- data.frame()
+
+for (i in seq_len(nrow(thickness_z))) {
+  data_i <- thickness_z[-i, ]
+  model_i <- lm(lh_frontalpole_thickness ~ group, data = data_i)
+  summ_i <- summary(model_i)
+  d_i <- cohen.d(data_i$lh_frontalpole_thickness[data_i$group == "Patient"],
+                  data_i$lh_frontalpole_thickness[data_i$group == "HC"],
+                  hedges.correction = FALSE)
+
+  loo_results <- rbind(loo_results, data.frame(
+    excluded_id = thickness_z$SubjectID[i],
+    Beta        = summ_i$coefficients["groupPatient", "Estimate"],
+    p_value     = summ_i$coefficients["groupPatient", "Pr(>|t|)"],
+    d           = as.numeric(d_i$estimate)
+  ))
+}
+
+range(loo_results$p_value)
+range(loo_results$d)
+sum(loo_results$p_value < 0.05)
+nrow(loo_results)
+```
+
+## 2. Frontal pole - Violin plot
+
+```{r}
+FrontalPole_plot <- ggplot(thickness_z, aes(x = group, y = lh_frontalpole_thickness, fill = group)) +
+  # violin (distribution shape)
+  geom_violin(width = 0.8, alpha = 0.5, colour = NA, trim = FALSE) +
+
+  # boxplot (summary stats)
+  geom_boxplot(width = 0.15, outlier.shape = NA, colour = "black", alpha = 0.8) +
+
+  # individual points, jittered
+  geom_jitter(width = 0.08, size = 1.8, alpha = 0.6, shape = 21,
+              colour = "black", stroke = 0.2) +
+
+  scale_fill_manual(values = c("HC" = "#a2c8e1", "Patient" = "#05326c")) +
+  scale_y_continuous(limits = c(-3, 3)) +
+  scale_x_discrete(limits = c("Patient", "HC"), labels = c("HC" = "Control", "Patient" = "Study")) +
+  labs(x = NULL, y = "Left frontal pole thickness (z-score)", fill = "Group") +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x  = element_text(size = 18, color = "black"),
+    axis.text.y  = element_text(size = 18, color = "black"),
+    axis.title.y = element_text(size = 18, color = "black")
+  )
+FrontalPole_plot
+```
+
+```{r}
+ggsave(FrontalPole_plot,filename="/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Figures/FrontalPole/FrontalPole.png", dpi=1200)
+
+ggsave(FrontalPole_plot,filename="/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Figures/FrontalPole/FrontalPole.pdf", dpi=1200)
+```
+
+## 3. Platinum findings - Leave-one-out analysis
+
+```{r}
+chemo <- read_xlsx("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/1_RedCap/Data_clean/Chemo_regimen/CT.xlsx")
+chemo <- chemo[,c(2,3,8:13,18)]
+chemo$Platinum <- as.factor(chemo$Platinum)
+chemo$Taxanen <- as.factor(chemo$Taxanen)
+chemo$Cyclophosphamide <- as.factor(chemo$Cyclophosphamide)
+chemo$Anthracyclines <- as.factor(chemo$Anthracyclines)
+chemo <- chemo[chemo$SubjectID!="C90",] #exclusion
+```
+
+```{r}
+thickness_z_chemo <- merge(thickness_z,chemo,by="SubjectID",all.y = TRUE)
+```
+
+```{r}
+platinum_ids <- which(thickness_z_chemo$Platinum=="1")
+
+vars <- c("lh_frontalpole_thickness","lh_lateralorbitofrontal_thickness")
+
+Chemo_Platinum_LOO <- lapply(vars, function(v) {
+  
+  loo_results <- lapply(platinum_ids, function(id) {
+    
+    data_loo <- thickness_z_chemo[-id, ]
+    
+    formula <- as.formula(paste0(v, " ~ Platinum"))
+    model <- lm(formula, data = data_loo)
+    summ <- summary(model)
+    
+    beta   <- summ$coefficients["Platinum1", "Estimate"]
+    se     <- summ$coefficients["Platinum1", "Std. Error"]
+    t      <- summ$coefficients["Platinum1", "t value"]
+    p      <- summ$coefficients["Platinum1", "Pr(>|t|)"]
+    df_res <- model$df.residual
+    
+    ci_beta <- confint(model)["Platinum1", ]
+    
+    d_res <- t_to_d(t, df_error = df_res, ci = 0.95)
+    
+    data.frame(
+      Variable       = v,
+      Excluded_ID    = id,
+      Beta           = beta,
+      CI_lower       = ci_beta[1],
+      CI_upper       = ci_beta[2],
+      SE             = se,
+      t_value        = t,
+      P_value        = p,
+      Cohens_d       = d_res$d,
+      d_CI_lower     = d_res$CI_low,
+      d_CI_upper     = d_res$CI_high
+    )
+  })
+  
+  do.call(rbind, loo_results)
+})
+
+Chemo_Platinum_LOO_df <- do.call(rbind, Chemo_Platinum_LOO)
+Chemo_Platinum_LOO_df
+```
+
+```{r}
+for (v in unique(Chemo_Platinum_LOO_df$Variable)) {
+  cat("\nVariable:", v, "\n")
+  sub <- Chemo_Platinum_LOO_df[Chemo_Platinum_LOO_df$Variable == v, ]
+  print(range(sub$P_value))
+  print(range(sub$Cohens_d))
+  print(sum(sub$P_value < 0.05))
+  print(nrow(sub))
+}
+```
+
+## 4. Platinum findings - Violin plot
+
+```{r}
+FrontalPole_Plat_plot <- ggplot(thickness_z_chemo, aes(x = Platinum, y = lh_frontalpole_thickness, fill = Platinum)) +
+  # violin (distribution shape)
+  geom_violin(width = 0.8, alpha = 0.5, colour = NA, trim = FALSE) +
+
+  # boxplot (summary stats)
+  geom_boxplot(width = 0.15, outlier.shape = NA, colour = "black", alpha = 0.8) +
+
+  # individual points, jittered
+  geom_jitter(width = 0.08, size = 1.8, alpha = 0.6, shape = 21,
+              colour = "black", stroke = 0.2) +
+
+  scale_fill_manual(values = c("0" = "#a2c8e1", "1" = "#05326c")) +
+  scale_y_continuous(limits = c(-2.5, 4.5)) +
+  scale_x_discrete(limits = c("1", "0"), labels = c("0" = "Other chemotherapy", "1" = "Platinum-based")) +
+  labs(x = NULL, y = "Left frontal pole thickness (z-score)", fill = "Group") +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x  = element_text(size = 18, color = "black"),
+    axis.text.y  = element_text(size = 18, color = "black"),
+    axis.title.y = element_text(size = 18, color = "black")
+  )
+FrontalPole_Plat_plot
+```
+
+```{r}
+LateralOrb_Plat_plot <- ggplot(thickness_z_chemo, aes(x = Platinum, y = lh_lateralorbitofrontal_thickness, fill = Platinum)) +
+  # violin (distribution shape)
+  geom_violin(width = 0.8, alpha = 0.5, colour = NA, trim = FALSE) +
+
+  # boxplot (summary stats)
+  geom_boxplot(width = 0.15, outlier.shape = NA, colour = "black", alpha = 0.8) +
+
+  # individual points, jittered
+  geom_jitter(width = 0.08, size = 1.8, alpha = 0.6, shape = 21,
+              colour = "black", stroke = 0.2) +
+
+  scale_fill_manual(values = c("0" = "#a2c8e1", "1" = "#05326c")) +
+  scale_y_continuous(limits = c(-2.5, 4.5)) +
+  scale_x_discrete(limits = c("1", "0"), labels = c("0" = "Other chemotherapy", "1" = "Platinum-based")) +
+  labs(x = NULL, y = "Left lateral orbitofrontal thickness (z-score)", fill = "Group") +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x  = element_text(size = 18, color = "black"),
+    axis.text.y  = element_text(size = 18, color = "black"),
+    axis.title.y = element_text(size = 18, color = "black")
+  )
+LateralOrb_Plat_plot
+```
+
+```{r}
+ggsave(FrontalPole_Plat_plot,filename="/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Figures/Platinum/FrontalPole.png", dpi=1200)
+
+ggsave(LateralOrb_Plat_plot,filename="/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Figures/Platinum/LaterlOrb.png", dpi=1200)
+```

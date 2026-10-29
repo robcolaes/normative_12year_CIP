@@ -1,0 +1,667 @@
+---
+title: "SOCIAL"
+output: html_document
+date: "2024-06-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# GGSEG3D VISUALIZE
+
+## 0. Data and libraries
+
+```{r}
+library(ggplot2)
+library(MASS)
+library(corrplot)
+library(BBmisc)
+library(lmerTest)
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(viridis)
+library(ggpubr)
+library(cluster)
+library(stringr)
+library(factoextra)
+library(broom)
+library(readxl)
+library(performance)
+library(emmeans)
+library(influence.ME)
+library(rstatix)
+library(ggseg)
+library(ggseg3d)
+library(reticulate)
+```
+
+Load lobe summary:
+
+```{r}
+lobes <- read.csv("Output/Components_Lobes/summary_statistics.csv")
+```
+
+```{r}
+K_lobes <- lobes[9:16,]
+S_lobes <- lobes[41:48,]
+I_lobes <- lobes[1:8,]
+
+K_lobes <- K_lobes[,c("Region","Patient.Cohen.s.d")]
+colnames(K_lobes) <- c("lobe","Patient_CohensD")
+
+S_lobes <- S_lobes[,c("Region","Patient.Cohen.s.d")]
+colnames(S_lobes) <- c("lobe","Patient_CohensD")
+
+I_lobes <- I_lobes[,c("Region","Patient.Cohen.s.d")]
+colnames(I_lobes) <- c("lobe","Patient_CohensD")
+```
+
+```{r}
+lh_K_lobes <- K_lobes[1:4,]
+rh_K_lobes <- K_lobes[5:8,]
+
+lh_S_lobes <- S_lobes[1:4,]
+rh_S_lobes <- S_lobes[5:8,]
+
+lh_I_lobes <- I_lobes[1:4,]
+rh_I_lobes <- I_lobes[5:8,]
+```
+
+Load regional summary:
+
+```{r}
+surface <- read.csv("Output/Area/summary_statistics.csv")
+thickness <- read.csv("Output/Thickness/summary_statistics.csv")
+
+surface <- surface[,c("Region","Patient.Cohen.s.d")]
+colnames(surface) <- c("region","Patient_CohensD")
+thickness <- thickness[,c("Region","Patient.Cohen.s.d")]
+colnames(thickness) <- c("region","Patient_CohensD")
+```
+
+```{r}
+lh_surface <- surface[1:34,]
+rh_surface <- surface[35:68,]
+
+lh_thickness <- thickness[1:34,]
+rh_thickness <- thickness[35:68,]
+```
+
+## 1. Visualize Lobes
+
+```{r}
+lobe_map <- list(
+  frontal = c(
+    "caudal middle frontal",
+    "lateral orbitofrontal",
+    "medial orbitofrontal",
+    "pars opercularis",
+    "pars orbitalis",
+    "pars triangularis",
+    "precentral",
+    "rostral middle frontal",
+    "superior frontal",
+    "frontal pole"
+  ),
+  
+  parietal = c(
+    "inferior parietal",
+    "paracentral",
+    "postcentral",
+    "precuneus",
+    "superior parietal",
+    "supramarginal"
+  ),
+  
+  temporal = c(
+    "bankssts",
+    "entorhinal",
+    "fusiform",
+    "inferior temporal",
+    "middle temporal",
+    "parahippocampal",
+    "superior temporal",
+    "temporal pole",
+    "transverse temporal"
+  ),
+  
+  occipital = c(
+    "cuneus",
+    "lateral occipital",
+    "lingual",
+    "pericalcarine"
+  )
+)
+```
+
+```{r}
+atlas_lobe_left <- dk_3d %>%
+  filter(surf == "inflated" & hemi == "left") %>%
+  unnest(ggseg_3d) %>%
+  ungroup() %>%
+  select(region) %>%
+  na.omit() %>%
+  filter(!region %in% c("corpus callosum")) # needs to be removed
+
+atlas_lobe_right <- dk_3d %>%
+  filter(surf == "inflated" & hemi == "right") %>%
+  unnest(ggseg_3d) %>%
+  ungroup() %>%
+  select(region) %>%
+  na.omit() %>%
+  filter(!region %in% c("corpus callosum")) # needs to be removed
+
+atlas_lobe_left <- atlas_lobe_left %>%
+  mutate(
+    lobe = case_when(
+      region %in% lobe_map$frontal ~ "frontal",
+      region %in% lobe_map$temporal ~ "temporal",
+      region %in% lobe_map$parietal ~ "parietal",
+      region %in% lobe_map$occipital ~ "occipital",
+      TRUE ~ NA_character_
+    )
+  ) %>% 
+  filter(!is.na(lobe))
+
+atlas_lobe_right <- atlas_lobe_right %>%
+  mutate(
+    lobe = case_when(
+      region %in% lobe_map$frontal ~ "frontal",
+      region %in% lobe_map$temporal ~ "temporal",
+      region %in% lobe_map$parietal ~ "parietal",
+      region %in% lobe_map$occipital ~ "occipital",
+      TRUE ~ NA_character_
+    )
+  ) %>% 
+  filter(!is.na(lobe))
+
+atlas_lobe_left <- atlas_lobe_left %>%
+  mutate(region_clean = region %>%
+           tolower() %>%
+           str_replace_all("[ _]", ""))
+
+atlas_lobe_right <- atlas_lobe_right %>%
+  mutate(region_clean = region %>%
+           tolower() %>%
+           str_replace_all("[ _]", ""))
+```
+
+### 1.1. K - Tension
+
+Merge with z-scores: **IMPORTANT Your regions need to match with atlas_lobe!**
+
+```{r}
+lh_K_lobes <- lh_K_lobes %>%
+  mutate(lobe = str_replace(lobe, "^K_|^K_", "")) %>%
+  mutate(lobe = str_replace(lobe, "^left_|^right_", "")) %>%
+  mutate(lobe = str_replace(lobe, "^.", tolower))
+
+rh_K_lobes <- rh_K_lobes %>%
+  mutate(lobe = str_replace(lobe, "^K_|^K_", "")) %>%
+  mutate(lobe = str_replace(lobe, "^left_|^right_", "")) %>%
+  mutate(lobe = str_replace(lobe, "^.", tolower))
+```
+
+```{r}
+leftData <- merge(atlas_lobe_left,lh_K_lobes,by="lobe")
+LeftData_PAT <- leftData[,c("region","Patient_CohensD")]
+
+rightData <- merge(atlas_lobe_right,rh_K_lobes,by="lobe")
+RightData_PAT <- rightData[,c("region","Patient_CohensD")]
+```
+
+#### 1.1.1. Left Hemisphere
+
+```{r}
+pat_LH_K_lobe_med <- ggseg3d(.data = LeftData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("left medial") %>% remove_axes()
+pat_LH_K_lobe_med
+```
+
+```{r}
+pat_LH_K_lobe_lat <- ggseg3d(.data = LeftData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("left lateral") %>% remove_axes() 
+pat_LH_K_lobe_lat
+```
+
+#### 1.1.2. Right Hemisphere
+
+```{r}
+pat_RH_K_lobe_med <- ggseg3d(.data = RightData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("right medial") %>% remove_axes()
+pat_RH_K_lobe_med
+```
+
+```{r}
+pat_RH_K_lobe_lat <- ggseg3d(.data = RightData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("right lateral") %>% remove_axes() 
+pat_RH_K_lobe_lat
+```
+
+### 1.2. S - Shape
+
+Merge with z-scores: **IMPORTANT Your regions need to match with atlas_lobe!**
+
+```{r}
+lh_S_lobes <- lh_S_lobes %>%
+  mutate(lobe = str_replace(lobe, "^S_|^S_", "")) %>%
+  mutate(lobe = str_replace(lobe, "^left_|^right_", "")) %>%
+  mutate(lobe = str_replace(lobe, "^.", tolower))
+
+rh_S_lobes <- rh_S_lobes %>%
+  mutate(lobe = str_replace(lobe, "^S_|^S_", "")) %>%
+  mutate(lobe = str_replace(lobe, "^left_|^right_", "")) %>%
+  mutate(lobe = str_replace(lobe, "^.", tolower))
+```
+
+```{r}
+leftData <- merge(atlas_lobe_left,lh_S_lobes,by="lobe")
+LeftData_PAT <- leftData[,c("region","Patient_CohensD")]
+
+rightData <- merge(atlas_lobe_right,rh_S_lobes,by="lobe")
+RightData_PAT <- rightData[,c("region","Patient_CohensD")]
+```
+
+#### 1.2.1. Left Hemisphere
+
+```{r}
+pat_LH_S_lobe_med <- ggseg3d(.data = LeftData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("left medial") %>% remove_axes()
+pat_LH_S_lobe_med
+```
+
+```{r}
+pat_LH_S_lobe_lat <- ggseg3d(.data = LeftData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("left lateral") %>% remove_axes() 
+pat_LH_S_lobe_lat
+```
+
+#### 1.2.2. Right Hemisphere
+
+```{r}
+pat_RH_S_lobe_med <- ggseg3d(.data = RightData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("right medial") %>% remove_axes()
+pat_RH_S_lobe_med
+```
+
+```{r}
+pat_RH_S_lobe_lat <- ggseg3d(.data = RightData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("right lateral") %>% remove_axes() 
+pat_RH_S_lobe_lat
+```
+
+### 1.3. I - Isometric
+
+Merge with z-scores: **IMPORTANT Your regions need to match with atlas_lobe!**
+
+```{r}
+lh_I_lobes <- lh_I_lobes %>%
+  mutate(lobe = str_replace(lobe, "^I_|^I_", "")) %>%
+  mutate(lobe = str_replace(lobe, "^left_|^right_", "")) %>%
+  mutate(lobe = str_replace(lobe, "^.", tolower))
+
+rh_I_lobes <- rh_I_lobes %>%
+  mutate(lobe = str_replace(lobe, "^I_|^I_", "")) %>%
+  mutate(lobe = str_replace(lobe, "^left_|^right_", "")) %>%
+  mutate(lobe = str_replace(lobe, "^.", tolower))
+```
+
+```{r}
+leftData <- merge(atlas_lobe_left,lh_I_lobes,by="lobe")
+LeftData_PAT <- leftData[,c("region","Patient_CohensD")]
+
+rightData <- merge(atlas_lobe_right,rh_I_lobes,by="lobe")
+RightData_PAT <- rightData[,c("region","Patient_CohensD")]
+```
+
+#### 1.3.1. Left Hemisphere
+
+```{r}
+pat_LH_I_lobe_med <- ggseg3d(.data = LeftData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("left medial") %>% remove_axes()
+pat_LH_I_lobe_med
+```
+
+```{r}
+pat_LH_I_lobe_lat <- ggseg3d(.data = LeftData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("left lateral") %>% remove_axes() 
+pat_LH_I_lobe_lat
+```
+
+#### 1.3.2. Right Hemisphere
+
+```{r}
+pat_RH_I_lobe_med <- ggseg3d(.data = RightData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("right medial") %>% remove_axes()
+pat_RH_I_lobe_med
+```
+
+```{r}
+pat_RH_I_lobe_lat <- ggseg3d(.data = RightData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("right lateral") %>% remove_axes() 
+pat_RH_I_lobe_lat
+```
+
+## 2. Surface Area
+
+Select atlas, which hemisphere, and how the surface needs to be presented:
+
+```{r}
+atlas_data_left <- dk_3d %>%
+  filter(surf == "inflated" & hemi == "left") %>%
+  unnest(ggseg_3d) %>%
+  ungroup() %>%
+  select(region) %>%
+  na.omit() %>%
+  filter(!region %in% c("corpus callosum")) # needs to be removed
+
+atlas_data_right <- dk_3d %>%
+  filter(surf == "inflated" & hemi == "right") %>%
+  unnest(ggseg_3d) %>%
+  ungroup() %>%
+  select(region) %>%
+  na.omit() %>%
+  filter(!region %in% c("corpus callosum")) # needs to be removed
+```
+
+Make region_clean to match with atlas_data
+
+```{r}
+atlas_data_left <- atlas_data_left %>%
+  mutate(region_clean = region %>%
+           tolower() %>%
+           str_replace_all("[ _]", ""))
+
+atlas_data_right <- atlas_data_right %>%
+  mutate(region_clean = region %>%
+           tolower() %>%
+           str_replace_all("[ _]", ""))
+```
+
+Merge data with our zscores. **IMPORTANT: Your regions need to match with atlas_data!**
+
+```{r}
+lh_surface <- lh_surface %>%
+  # remove lh_ or rh_ prefix
+  mutate(region = str_replace(region, "^lh_|^rh_", "")) %>%
+  # remove _surface suffix
+  mutate(region = str_replace(region, "_area$", ""))
+
+rh_surface <- rh_surface %>%
+  # remove lh_ or rh_ prefix
+  mutate(region = str_replace(region, "^lh_|^rh_", "")) %>%
+  # remove _surface suffix
+  mutate(region = str_replace(region, "_area$", ""))
+```
+
+```{r}
+leftData <- merge(atlas_data_left,lh_surface,by.x = "region_clean",by.y = "region")
+LeftData_PAT <- leftData[,c("region","Patient_CohensD")]
+```
+
+```{r}
+rightData <- merge(atlas_data_right,rh_surface,by.x = "region_clean",by.y = "region")
+RightData_PAT <- rightData[,c("region","Patient_CohensD")]
+```
+
+### 2.1. Left Hemisphere
+
+```{r}
+pat_LH_surf_med <- ggseg3d(.data = LeftData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("left medial") %>% remove_axes()
+pat_LH_surf_med
+```
+
+```{r}
+pat_LH_surf_lat <- ggseg3d(.data = LeftData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("left lateral") %>% remove_axes() 
+pat_LH_surf_lat
+```
+
+### 2.2. Right Hemisphere
+
+```{r}
+pat_RH_surf_med <- ggseg3d(.data = RightData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("right medial") %>% remove_axes()
+pat_RH_surf_med
+```
+
+```{r}
+pat_RH_surf_lat <- ggseg3d(.data = RightData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("right lateral") %>% remove_axes() 
+pat_RH_surf_lat
+```
+
+## 3. Thickness
+
+Merge data with our zscores. **IMPORTANT: Your regions need to match with atlas_data!**
+
+```{r}
+lh_thickness <- lh_thickness %>%
+  # remove lh_ or rh_ prefix
+  mutate(region = str_replace(region, "^lh_|^rh_", "")) %>%
+  # remove _thickness suffix
+  mutate(region = str_replace(region, "_thickness$", ""))
+
+rh_thickness <- rh_thickness %>%
+  # remove lh_ or rh_ prefix
+  mutate(region = str_replace(region, "^lh_|^rh_", "")) %>%
+  # remove _thickness suffix
+  mutate(region = str_replace(region, "_thickness$", ""))
+```
+
+```{r}
+leftData <- merge(atlas_data_left,lh_thickness,by.x = "region_clean",by.y = "region")
+LeftData_PAT <- leftData[,c("region","Patient_CohensD")]
+```
+
+```{r}
+rightData <- merge(atlas_data_right,rh_thickness,by.x = "region_clean",by.y = "region")
+RightData_PAT <- rightData[,c("region","Patient_CohensD")]
+```
+
+### 2.1. Left Hemisphere
+
+```{r}
+pat_LH_thick_med <- ggseg3d(.data = LeftData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("left medial") %>% remove_axes()
+pat_LH_thick_med
+```
+
+```{r}
+pat_LH_thick_lat <- ggseg3d(.data = LeftData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("left lateral") %>% remove_axes() 
+pat_LH_thick_lat
+```
+
+### 2.2. Right Hemisphere
+
+```{r}
+pat_RH_thick_med <- ggseg3d(.data = RightData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("right medial") %>% remove_axes()
+pat_RH_thick_med
+```
+
+```{r}
+pat_RH_thick_lat <- ggseg3d(.data = RightData_PAT,
+        atlas = dk_3d,
+        colour = "Patient_CohensD",
+        text = "Patient_CohensD", na.colour = "white",
+        palette = c("midnightblue" = -1, "deepskyblue1" = -0.5, "seashell" = 0, "orangered" = 0.5, "darkred" = 1)) %>% 
+  pan_camera("right lateral") %>% remove_axes() 
+pat_RH_thick_lat
+```
+
+## 4. Save images
+
+Save images =\> **ORCA** needs to be downloaded and installed for this.
+
+K-Component:
+
+```{r}
+plotly::orca(pat_LH_K_lobe_med, "Figures/Brain3D_COHENSD/pat_LH_K_lobe_med.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(pat_LH_K_lobe_lat, "Figures/Brain3D_COHENSD/pat_LH_K_lobe_lat.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(pat_RH_K_lobe_med, "Figures/Brain3D_COHENSD/pat_RH_K_lobe_med.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(pat_RH_K_lobe_lat, "Figures/Brain3D_COHENSD/pat_RH_K_lobe_lat.png", width = 3000, height = 2000)
+```
+
+S-Component:
+
+```{r}
+plotly::orca(pat_LH_S_lobe_med, "Figures/Brain3D_COHENSD/pat_LH_S_lobe_med.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(pat_LH_S_lobe_lat, "Figures/Brain3D_COHENSD/pat_LH_S_lobe_lat.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(pat_RH_S_lobe_med, "Figures/Brain3D_COHENSD/pat_RH_S_lobe_med.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(pat_RH_S_lobe_lat, "Figures/Brain3D_COHENSD/pat_RH_S_lobe_lat.png", width = 3000, height = 2000)
+```
+
+I-Component:
+
+```{r}
+plotly::orca(pat_LH_I_lobe_med, "Figures/Brain3D_COHENSD/pat_LH_I_lobe_med.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(pat_LH_I_lobe_lat, "Figures/Brain3D_COHENSD/pat_LH_I_lobe_lat.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(pat_RH_I_lobe_med, "Figures/Brain3D_COHENSD/pat_RH_I_lobe_med.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(pat_RH_I_lobe_lat, "Figures/Brain3D_COHENSD/pat_RH_I_lobe_lat.png", width = 3000, height = 2000)
+```
+
+Surface:
+
+```{r}
+plotly::orca(pat_LH_surf_med, "Figures/Brain3D_COHENSD/pat_LH_surf_med.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(pat_LH_surf_lat, "Figures/Brain3D_COHENSD/pat_LH_surf_lat.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(pat_RH_surf_med, "Figures/Brain3D_COHENSD/pat_RH_surf_med.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(pat_RH_surf_lat, "Figures/Brain3D_COHENSD/pat_RH_surf_lat.png", width = 3000, height = 2000)
+```
+
+Thickness:
+
+```{r}
+plotly::orca(pat_LH_thick_med, "Figures/Brain3D_COHENSD/pat_LH_thick_med.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(pat_LH_thick_lat, "Figures/Brain3D_COHENSD/pat_LH_thick_lat.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(pat_RH_thick_med, "Figures/Brain3D_COHENSD/pat_RH_thick_med.png", width = 3000, height = 2000)
+```
+
+```{r}
+plotly::orca(pat_RH_thick_lat, "Figures/Brain3D_COHENSD/pat_RH_thick_lat.png", width = 3000, height = 2000)
+```
+
+### 

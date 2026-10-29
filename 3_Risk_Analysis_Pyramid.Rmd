@@ -1,0 +1,941 @@
+---
+title: "SOCIAL"
+output: html_document
+date: "2024-06-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Risk Analysis
+
+## 0. Data and libraries
+
+```{r}
+library(ggplot2)
+library(MASS)
+library(corrplot)
+library(BBmisc)
+library(lmerTest)
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(viridis)
+library(ggpubr)
+library(cluster)
+library(stringr)
+library(factoextra)
+library(broom)
+library(readxl)
+library(performance)
+library(emmeans)
+library(influence.ME)
+library(rstatix)
+library(ggridges)
+library(effectsize)
+```
+
+Import dataframe with the selected regions z-scores only:
+
+```{r}
+regions_select <- read.csv("Results/Risk_Factors/Selected_regions_z.csv")
+regions_select <- regions_select[,c("SubjectID","group","lh_parstriangularis_area","lh_frontalpole_thickness","lh_lateralorbitofrontal_thickness","lh_superiorparietal_thickness","rh_caudalmiddlefrontal_thickness","rh_superiorparietal_thickness")]
+```
+
+-   lh_parstriangularis_area
+
+-   lh_frontalpole_thickness
+
+-   lh_lateralorbitofrontal_thickness
+
+-   lh_superiorparietal_thickness
+
+-   rh_caudalmiddlefrontal_thickness
+
+-   rh_superiorparietal_thickness
+
+```{r}
+global_scores <- read.csv("Output/global_deviation_scores.csv")
+global_scores <- global_scores[,c("SubjectID","AverageDS")]
+```
+
+```{r}
+regions_select <- merge(regions_select,global_scores,by="SubjectID")
+```
+
+```{r}
+# Vector of variables of interest
+vars <- c("lh_parstriangularis_area","lh_frontalpole_thickness","lh_lateralorbitofrontal_thickness","lh_superiorparietal_thickness","rh_caudalmiddlefrontal_thickness","rh_superiorparietal_thickness","AverageDS"
+)
+```
+
+## 1. General risk factors
+
+```{r}
+general <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/4_Characteristics/Output/list_general_all.csv")
+general$Maternal_death <- as.factor(general$Maternal_death)
+general$Education_mother_binary <- as.factor(general$Education_mother_binary)
+general$Prematurity <- ifelse(general$GA_correct < 37, 1, 0)
+general$Prematurity <- as.factor(general$Prematurity)
+```
+
+```{r}
+regions_select_general <- merge(regions_select,general,by.x="SubjectID",by.y="ID")
+```
+
+### 1.1. Prematurity
+
+```{r}
+Cohort_PREM <- lapply(vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ Prematurity"))
+  model <- lm(formula, data = regions_select_general)
+  summ <- summary(model)
+  
+  beta   <- summ$coefficients["Prematurity1", "Estimate"]
+  se     <- summ$coefficients["Prematurity1", "Std. Error"]
+  t     <- summ$coefficients["Prematurity1", "t value"]
+  p      <- summ$coefficients["Prematurity1", "Pr(>|t|)"]
+  df_res <- model$df.residual
+  
+  ci_beta <- confint(model)["Prematurity1", ]
+  
+  d_res   <- t_to_d(t, df_error = df_res, ci = 0.95)
+  
+  data.frame(
+    Variable   = v,
+    Beta       = beta,
+    CI_lower   = ci_beta[1],
+    CI_upper   = ci_beta[2],
+    SE         = se,
+    t_value    = t,
+    P_value    = p,
+    Cohens_d   = d_res$d,
+    d_CI_lower = d_res$CI_low,
+    d_CI_upper = d_res$CI_high
+  )
+  
+})
+
+Cohort_PREM_df <- do.call(rbind, Cohort_PREM)
+Cohort_PREM_df
+```
+
+### 1.2. Maternal age
+
+```{r}
+Cohort_MA <- lapply(vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ Age_mother_at_birth_this_child"))
+  model <- lm(formula, data = regions_select_general)
+  summ <- summary(model)
+  
+  beta   <- summ$coefficients["Age_mother_at_birth_this_child", "Estimate"]
+  se     <- summ$coefficients["Age_mother_at_birth_this_child", "Std. Error"]
+  t     <- summ$coefficients["Age_mother_at_birth_this_child", "t value"]
+  p      <- summ$coefficients["Age_mother_at_birth_this_child", "Pr(>|t|)"]
+  df_res <- model$df.residual
+  
+  ci_beta <- confint(model)["Age_mother_at_birth_this_child", ]
+  
+  d_res   <- t_to_d(t, df_error = df_res, ci = 0.95)
+  
+  data.frame(
+    Variable   = v,
+    Beta       = beta,
+    CI_lower   = ci_beta[1],
+    CI_upper   = ci_beta[2],
+    SE         = se,
+    t_value    = t,
+    P_value    = p,
+    Cohens_d   = d_res$d,
+    d_CI_lower = d_res$CI_low,
+    d_CI_upper = d_res$CI_high
+  )
+})
+
+Cohort_MA_df <- do.call(rbind, Cohort_MA)
+Cohort_MA_df
+```
+
+### 1.3. Maternal education
+
+```{r}
+Cohort_MED <- lapply(vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ Education_mother_binary"))
+  model <- lm(formula, data = regions_select_general)
+  summ <- summary(model)
+  
+  beta   <- summ$coefficients["Education_mother_binary1", "Estimate"]
+  se     <- summ$coefficients["Education_mother_binary1", "Std. Error"]
+  t     <- summ$coefficients["Education_mother_binary1", "t value"]
+  p      <- summ$coefficients["Education_mother_binary1", "Pr(>|t|)"]
+  df_res <- model$df.residual
+  
+  ci_beta <- confint(model)["Education_mother_binary1", ]
+  
+  d_res   <- t_to_d(t, df_error = df_res, ci = 0.95)
+  
+  data.frame(
+    Variable   = v,
+    Beta       = beta,
+    CI_lower   = ci_beta[1],
+    CI_upper   = ci_beta[2],
+    SE         = se,
+    t_value    = t,
+    P_value    = p,
+    Cohens_d   = d_res$d,
+    d_CI_lower = d_res$CI_low,
+    d_CI_upper = d_res$CI_high
+  )
+})
+
+Cohort_MED_df <- do.call(rbind, Cohort_MED)
+Cohort_MED_df
+```
+
+## 2. Healthy controls risk factors
+
+```{r}
+regions_select_general_HC <- regions_select_general[regions_select_general$group=="HC",]
+```
+
+### 2.1. Prematurity
+
+```{r}
+Cohort_PREM_HC <- lapply(vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ Prematurity"))
+  model <- lm(formula, data = regions_select_general_HC)
+  summ <- summary(model)
+  
+  beta   <- summ$coefficients["Prematurity1", "Estimate"]
+  se     <- summ$coefficients["Prematurity1", "Std. Error"]
+  t     <- summ$coefficients["Prematurity1", "t value"]
+  p      <- summ$coefficients["Prematurity1", "Pr(>|t|)"]
+  df_res <- model$df.residual
+  
+  ci_beta <- confint(model)["Prematurity1", ]
+  
+  d_res   <- t_to_d(t, df_error = df_res, ci = 0.95)
+  
+  data.frame(
+    Variable   = v,
+    Beta       = beta,
+    CI_lower   = ci_beta[1],
+    CI_upper   = ci_beta[2],
+    SE         = se,
+    t_value    = t,
+    P_value    = p,
+    Cohens_d   = d_res$d,
+    d_CI_lower = d_res$CI_low,
+    d_CI_upper = d_res$CI_high
+  )
+})
+
+Cohort_PREM_df_HC <- do.call(rbind, Cohort_PREM_HC)
+Cohort_PREM_df_HC
+```
+
+### 2.2. Maternal age
+
+```{r}
+Cohort_MA_HC <- lapply(vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ Age_mother_at_birth_this_child"))
+  model <- lm(formula, data = regions_select_general_HC)
+  summ <- summary(model)
+  
+  beta   <- summ$coefficients["Age_mother_at_birth_this_child", "Estimate"]
+  se     <- summ$coefficients["Age_mother_at_birth_this_child", "Std. Error"]
+  t     <- summ$coefficients["Age_mother_at_birth_this_child", "t value"]
+  p      <- summ$coefficients["Age_mother_at_birth_this_child", "Pr(>|t|)"]
+  df_res <- model$df.residual
+  
+  ci_beta <- confint(model)["Age_mother_at_birth_this_child", ]
+  
+  d_res   <- t_to_d(t, df_error = df_res, ci = 0.95)
+  
+  data.frame(
+    Variable   = v,
+    Beta       = beta,
+    CI_lower   = ci_beta[1],
+    CI_upper   = ci_beta[2],
+    SE         = se,
+    t_value    = t,
+    P_value    = p,
+    Cohens_d   = d_res$d,
+    d_CI_lower = d_res$CI_low,
+    d_CI_upper = d_res$CI_high
+  )
+})
+
+Cohort_MA_df_HC <- do.call(rbind, Cohort_MA_HC)
+Cohort_MA_df_HC
+```
+
+### 2.3. Maternal education
+
+```{r}
+Cohort_MED_HC <- lapply(vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ Education_mother_binary"))
+  model <- lm(formula, data = regions_select_general)
+  summ <- summary(model)
+  
+  beta   <- summ$coefficients["Education_mother_binary1", "Estimate"]
+  se     <- summ$coefficients["Education_mother_binary1", "Std. Error"]
+  t     <- summ$coefficients["Education_mother_binary1", "t value"]
+  p      <- summ$coefficients["Education_mother_binary1", "Pr(>|t|)"]
+  df_res <- model$df.residual
+  
+  ci_beta <- confint(model)["Education_mother_binary1", ]
+  
+  d_res   <- t_to_d(t, df_error = df_res, ci = 0.95)
+  
+  data.frame(
+    Variable   = v,
+    Beta       = beta,
+    CI_lower   = ci_beta[1],
+    CI_upper   = ci_beta[2],
+    SE         = se,
+    t_value    = t,
+    P_value    = p,
+    Cohens_d   = d_res$d,
+    d_CI_lower = d_res$CI_low,
+    d_CI_upper = d_res$CI_high
+  )
+})
+
+Cohort_MED_df_HC <- do.call(rbind, Cohort_MED_HC)
+Cohort_MED_df_HC
+```
+
+## 
+
+## 2. Patients risk factors
+
+```{r}
+regions_select_CIP <- regions_select[regions_select$group=="Patient",]
+```
+
+```{r}
+GA_mdeath <- general[,c("ID","GA_correct","Maternal_death","Education_mother_binary","Prematurity")]
+```
+
+```{r}
+treat <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/4_Characteristics/Output/list_treatment.csv")
+regions_select_CIP_treat <- merge(regions_select_CIP,treat,by.x="SubjectID",by.y="ID")
+regions_select_CIP_treat <- merge(regions_select_CIP_treat,GA_mdeath,by.x="SubjectID",by.y="ID")
+```
+
+Make sure treatment levels are correct:
+
+```{r}
+regions_select_CIP_treat$treatment_during_preg_CT <- as.factor(regions_select_CIP_treat$treatment_during_preg_CT)
+regions_select_CIP_treat$treatment_during_preg_CT <- relevel(regions_select_CIP_treat$treatment_during_preg_CT,ref="Unchecked")
+
+regions_select_CIP_treat$treatment_during_preg_RT <- as.factor(regions_select_CIP_treat$treatment_during_preg_RT)
+regions_select_CIP_treat$treatment_during_preg_RT <- relevel(regions_select_CIP_treat$treatment_during_preg_RT,ref="Unchecked")
+
+regions_select_CIP_treat$treatment_during_preg_Surgery <- as.factor(regions_select_CIP_treat$treatment_during_preg_Surgery)
+regions_select_CIP_treat$treatment_during_preg_Surgery <- relevel(regions_select_CIP_treat$treatment_during_preg_Surgery,ref="Unchecked")
+
+regions_select_CIP_treat$treatment_during_preg_NoTreatment <- as.factor(regions_select_CIP_treat$treatment_during_preg_NoTreatment)
+regions_select_CIP_treat$treatment_during_preg_NoTreatment <- relevel(regions_select_CIP_treat$treatment_during_preg_NoTreatment,ref="Unchecked")
+```
+
+```{r}
+matd <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/4_Characteristics/Output/list_maternaldeath.csv")
+```
+
+```{r}
+matd <- matd[matd$death_in_2yrs==TRUE,c(2,5)]
+matd <- merge(regions_select_general,matd,by.x="SubjectID",by.y="ID")
+matd$death_in_2yrs <- as.factor(matd$death_in_2yrs)
+```
+
+```{r}
+regions_select_CIP_treat$death_in_2yrs <- 0
+regions_select_CIP_treat[regions_select_CIP_treat$SubjectID=="C14",]$death_in_2yrs <- 1
+regions_select_CIP_treat[regions_select_CIP_treat$SubjectID=="C20",]$death_in_2yrs <- 1
+regions_select_CIP_treat[regions_select_CIP_treat$SubjectID=="C31",]$death_in_2yrs <- 1
+regions_select_CIP_treat[regions_select_CIP_treat$SubjectID=="C82",]$death_in_2yrs <- 1
+```
+
+### 2.1. Prematurity
+
+```{r}
+Patient_PREM <- lapply(vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ Prematurity"))
+  model <- lm(formula, data = regions_select_CIP_treat)
+  summ <- summary(model)
+  
+  beta   <- summ$coefficients["Prematurity1", "Estimate"]
+  se     <- summ$coefficients["Prematurity1", "Std. Error"]
+  t     <- summ$coefficients["Prematurity1", "t value"]
+  p      <- summ$coefficients["Prematurity1", "Pr(>|t|)"]
+  df_res <- model$df.residual
+  
+  ci_beta <- confint(model)["Prematurity1", ]
+  
+  d_res   <- t_to_d(t, df_error = df_res, ci = 0.95)
+  
+  data.frame(
+    Variable   = v,
+    Beta       = beta,
+    CI_lower   = ci_beta[1],
+    CI_upper   = ci_beta[2],
+    SE         = se,
+    t_value    = t,
+    P_value    = p,
+    Cohens_d   = d_res$d,
+    d_CI_lower = d_res$CI_low,
+    d_CI_upper = d_res$CI_high
+  )
+})
+
+Patient_PREM_df <- do.call(rbind, Patient_PREM)
+Patient_PREM_df
+```
+
+### 2.2. Maternal death
+
+```{r}
+Patient_MD <- lapply(vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ Maternal_death"))
+  model <- lm(formula, data = regions_select_CIP_treat)
+  summ <- summary(model)
+  
+  beta   <- summ$coefficients["Maternal_death1", "Estimate"]
+  se     <- summ$coefficients["Maternal_death1", "Std. Error"]
+  t     <- summ$coefficients["Maternal_death1", "t value"]
+  p      <- summ$coefficients["Maternal_death1", "Pr(>|t|)"]
+  df_res <- model$df.residual
+  
+  ci_beta <- confint(model)["Maternal_death1", ]
+  
+  d_res   <- t_to_d(t, df_error = df_res, ci = 0.95)
+  
+  data.frame(
+    Variable   = v,
+    Beta       = beta,
+    CI_lower   = ci_beta[1],
+    CI_upper   = ci_beta[2],
+    SE         = se,
+    t_value    = t,
+    P_value    = p,
+    Cohens_d   = d_res$d,
+    d_CI_lower = d_res$CI_low,
+    d_CI_upper = d_res$CI_high
+  )
+})
+
+Patient_MD_df <- do.call(rbind, Patient_MD)
+Patient_MD_df
+```
+
+### 2.3. Surgery
+
+```{r}
+Patient_Surgery <- lapply(vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ treatment_during_preg_Surgery"))
+  model <- lm(formula, data = regions_select_CIP_treat)
+  summ <- summary(model)
+  
+  beta   <- summ$coefficients["treatment_during_preg_SurgeryChecked", "Estimate"]
+  se     <- summ$coefficients["treatment_during_preg_SurgeryChecked", "Std. Error"]
+  t     <- summ$coefficients["treatment_during_preg_SurgeryChecked", "t value"]
+  p      <- summ$coefficients["treatment_during_preg_SurgeryChecked", "Pr(>|t|)"]
+  df_res <- model$df.residual
+  
+  ci_beta <- confint(model)["treatment_during_preg_SurgeryChecked", ]
+  
+  d_res   <- t_to_d(t, df_error = df_res, ci = 0.95)
+  
+  data.frame(
+    Variable   = v,
+    Beta       = beta,
+    CI_lower   = ci_beta[1],
+    CI_upper   = ci_beta[2],
+    SE         = se,
+    t_value    = t,
+    P_value    = p,
+    Cohens_d   = d_res$d,
+    d_CI_lower = d_res$CI_low,
+    d_CI_upper = d_res$CI_high
+  )
+})
+
+Patient_Surgery_df <- do.call(rbind, Patient_Surgery)
+Patient_Surgery_df
+```
+
+### 2.4. Chemotherapy
+
+```{r}
+Patient_Chemotherapy <- lapply(vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ treatment_during_preg_CT"))
+  model <- lm(formula, data = regions_select_CIP_treat)
+  summ <- summary(model)
+  
+  beta   <- summ$coefficients["treatment_during_preg_CTChecked", "Estimate"]
+  se     <- summ$coefficients["treatment_during_preg_CTChecked", "Std. Error"]
+  t     <- summ$coefficients["treatment_during_preg_CTChecked", "t value"]
+  p      <- summ$coefficients["treatment_during_preg_CTChecked", "Pr(>|t|)"]
+  df_res <- model$df.residual
+  
+  ci_beta <- confint(model)["treatment_during_preg_CTChecked", ]
+  
+  d_res   <- t_to_d(t, df_error = df_res, ci = 0.95)
+  
+  data.frame(
+    Variable   = v,
+    Beta       = beta,
+    CI_lower   = ci_beta[1],
+    CI_upper   = ci_beta[2],
+    SE         = se,
+    t_value    = t,
+    P_value    = p,
+    Cohens_d   = d_res$d,
+    d_CI_lower = d_res$CI_low,
+    d_CI_upper = d_res$CI_high
+  )
+})
+
+Patient_Chemotherapy_df <- do.call(rbind, Patient_Chemotherapy)
+Patient_Chemotherapy_df
+```
+
+### 2.5. Radiotherapy
+
+```{r}
+Patient_Radiotherapy <- lapply(vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ treatment_during_preg_RT"))
+  model <- lm(formula, data = regions_select_CIP_treat)
+  summ <- summary(model)
+  
+  beta   <- summ$coefficients["treatment_during_preg_RTChecked", "Estimate"]
+  se     <- summ$coefficients["treatment_during_preg_RTChecked", "Std. Error"]
+  t     <- summ$coefficients["treatment_during_preg_RTChecked", "t value"]
+  p      <- summ$coefficients["treatment_during_preg_RTChecked", "Pr(>|t|)"]
+  df_res <- model$df.residual
+  
+  ci_beta <- confint(model)["treatment_during_preg_RTChecked", ]
+  
+  d_res   <- t_to_d(t, df_error = df_res, ci = 0.95)
+  
+  data.frame(
+    Variable   = v,
+    Beta       = beta,
+    CI_lower   = ci_beta[1],
+    CI_upper   = ci_beta[2],
+    SE         = se,
+    t_value    = t,
+    P_value    = p,
+    Cohens_d   = d_res$d,
+    d_CI_lower = d_res$CI_low,
+    d_CI_upper = d_res$CI_high
+  )
+})
+
+Patient_Radiotherapy_df <- do.call(rbind, Patient_Radiotherapy)
+Patient_Radiotherapy_df
+```
+
+### 2.6. No treatment
+
+```{r}
+Patient_NoTreatment <- lapply(vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ treatment_during_preg_NoTreatment"))
+  model <- lm(formula, data = regions_select_CIP_treat)
+  summ <- summary(model)
+  
+  beta   <- summ$coefficients["treatment_during_preg_NoTreatmentChecked", "Estimate"]
+  se     <- summ$coefficients["treatment_during_preg_NoTreatmentChecked", "Std. Error"]
+  t     <- summ$coefficients["treatment_during_preg_NoTreatmentChecked", "t value"]
+  p      <- summ$coefficients["treatment_during_preg_NoTreatmentChecked", "Pr(>|t|)"]
+  df_res <- model$df.residual
+  
+  ci_beta <- confint(model)["treatment_during_preg_NoTreatmentChecked", ]
+  
+  d_res   <- t_to_d(t, df_error = df_res, ci = 0.95)
+  
+  data.frame(
+    Variable   = v,
+    Beta       = beta,
+    CI_lower   = ci_beta[1],
+    CI_upper   = ci_beta[2],
+    SE         = se,
+    t_value    = t,
+    P_value    = p,
+    Cohens_d   = d_res$d,
+    d_CI_lower = d_res$CI_low,
+    d_CI_upper = d_res$CI_high
+  )
+})
+
+Patient_NoTreatment_df <- do.call(rbind, Patient_NoTreatment)
+Patient_NoTreatment_df
+```
+
+## 3. Chemotherapy - Risk factors
+
+```{r}
+chemo <- read_xlsx("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/1_RedCap/Data_clean/Chemo_regimen/CT.xlsx")
+chemo <- chemo[,c(2,3,8:13,18)]
+chemo$Platinum <- as.factor(chemo$Platinum)
+chemo$Taxanen <- as.factor(chemo$Taxanen)
+chemo$Cyclophosphamide <- as.factor(chemo$Cyclophosphamide)
+chemo$Anthracyclines <- as.factor(chemo$Anthracyclines)
+```
+
+```{r}
+# Check
+setdiff(treat[treat$treatment_during_preg_CT=="Checked",]$ID,chemo$SubjectID)
+```
+
+```{r}
+regions_select_CIP_treat_chemo <- merge(regions_select_CIP_treat,chemo,by="SubjectID")
+```
+
+### 3.1. GA at treatment
+
+```{r}
+Chemo_GAtreatment <- lapply(vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ GA_at_treatment"))
+  model <- lm(formula, data = regions_select_CIP_treat_chemo)
+  summ <- summary(model)
+  
+  beta   <- summ$coefficients["GA_at_treatment", "Estimate"]
+  se     <- summ$coefficients["GA_at_treatment", "Std. Error"]
+  t     <- summ$coefficients["GA_at_treatment", "t value"]
+  p      <- summ$coefficients["GA_at_treatment", "Pr(>|t|)"]
+  df_res <- model$df.residual
+  
+  ci_beta <- confint(model)["GA_at_treatment", ]
+  
+  d_res   <- t_to_d(t, df_error = df_res, ci = 0.95)
+  
+  data.frame(
+    Variable   = v,
+    Beta       = beta,
+    CI_lower   = ci_beta[1],
+    CI_upper   = ci_beta[2],
+    SE         = se,
+    t_value    = t,
+    P_value    = p,
+    Cohens_d   = d_res$d,
+    d_CI_lower = d_res$CI_low,
+    d_CI_upper = d_res$CI_high
+  )
+})
+
+Chemo_GAtreatment_df <- do.call(rbind, Chemo_GAtreatment)
+Chemo_GAtreatment_df
+```
+
+### 3.2. Platinum
+
+```{r}
+Chemo_Platinum <- lapply(vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ Platinum"))
+  model <- lm(formula, data = regions_select_CIP_treat_chemo)
+  summ <- summary(model)
+  
+  beta   <- summ$coefficients["Platinum1", "Estimate"]
+  se     <- summ$coefficients["Platinum1", "Std. Error"]
+  t     <- summ$coefficients["Platinum1", "t value"]
+  p      <- summ$coefficients["Platinum1", "Pr(>|t|)"]
+  df_res <- model$df.residual
+  
+  ci_beta <- confint(model)["Platinum1", ]
+  
+  d_res   <- t_to_d(t, df_error = df_res, ci = 0.95)
+  
+  data.frame(
+    Variable   = v,
+    Beta       = beta,
+    CI_lower   = ci_beta[1],
+    CI_upper   = ci_beta[2],
+    SE         = se,
+    t_value    = t,
+    P_value    = p,
+    Cohens_d   = d_res$d,
+    d_CI_lower = d_res$CI_low,
+    d_CI_upper = d_res$CI_high
+  )
+})
+
+Chemo_Platinum_df <- do.call(rbind, Chemo_Platinum)
+Chemo_Platinum_df
+```
+
+### 3.3. Cyclophosphamide
+
+```{r}
+Chemo_Cyclophosphamide <- lapply(vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ Cyclophosphamide"))
+  model <- lm(formula, data = regions_select_CIP_treat_chemo)
+  summ <- summary(model)
+  
+  beta   <- summ$coefficients["Cyclophosphamide1", "Estimate"]
+  se     <- summ$coefficients["Cyclophosphamide1", "Std. Error"]
+  t     <- summ$coefficients["Cyclophosphamide1", "t value"]
+  p      <- summ$coefficients["Cyclophosphamide1", "Pr(>|t|)"]
+  df_res <- model$df.residual
+  
+  ci_beta <- confint(model)["Cyclophosphamide1", ]
+  
+  d_res   <- t_to_d(t, df_error = df_res, ci = 0.95)
+  
+  data.frame(
+    Variable   = v,
+    Beta       = beta,
+    CI_lower   = ci_beta[1],
+    CI_upper   = ci_beta[2],
+    SE         = se,
+    t_value    = t,
+    P_value    = p,
+    Cohens_d   = d_res$d,
+    d_CI_lower = d_res$CI_low,
+    d_CI_upper = d_res$CI_high
+  )
+})
+
+Chemo_Cyclophosphamide_df <- do.call(rbind, Chemo_Cyclophosphamide)
+Chemo_Cyclophosphamide_df
+```
+
+### 3.4. Anthracyclines
+
+```{r}
+Chemo_Anthracyclines <- lapply(vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ Anthracyclines"))
+  model <- lm(formula, data = regions_select_CIP_treat_chemo)
+  summ <- summary(model)
+  
+  beta   <- summ$coefficients["Anthracyclines1", "Estimate"]
+  se     <- summ$coefficients["Anthracyclines1", "Std. Error"]
+  t     <- summ$coefficients["Anthracyclines1", "t value"]
+  p      <- summ$coefficients["Anthracyclines1", "Pr(>|t|)"]
+  df_res <- model$df.residual
+  
+  ci_beta <- confint(model)["Anthracyclines1", ]
+  
+  d_res   <- t_to_d(t, df_error = df_res, ci = 0.95)
+  
+  data.frame(
+    Variable   = v,
+    Beta       = beta,
+    CI_lower   = ci_beta[1],
+    CI_upper   = ci_beta[2],
+    SE         = se,
+    t_value    = t,
+    P_value    = p,
+    Cohens_d   = d_res$d,
+    d_CI_lower = d_res$CI_low,
+    d_CI_upper = d_res$CI_high
+  )
+})
+
+Chemo_Anthracyclines_df <- do.call(rbind, Chemo_Anthracyclines)
+Chemo_Anthracyclines_df
+```
+
+### 3.5. Taxanes
+
+```{r}
+Chemo_Taxanen <- lapply(vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ Taxanen"))
+  model <- lm(formula, data = regions_select_CIP_treat_chemo)
+  summ <- summary(model)
+  
+  beta   <- summ$coefficients["Taxanen1", "Estimate"]
+  se     <- summ$coefficients["Taxanen1", "Std. Error"]
+  t     <- summ$coefficients["Taxanen1", "t value"]
+  p      <- summ$coefficients["Taxanen1", "Pr(>|t|)"]
+  df_res <- model$df.residual
+  
+  ci_beta <- confint(model)["Taxanen1", ]
+  
+  d_res   <- t_to_d(t, df_error = df_res, ci = 0.95)
+  
+  data.frame(
+    Variable   = v,
+    Beta       = beta,
+    CI_lower   = ci_beta[1],
+    CI_upper   = ci_beta[2],
+    SE         = se,
+    t_value    = t,
+    P_value    = p,
+    Cohens_d   = d_res$d,
+    d_CI_lower = d_res$CI_low,
+    d_CI_upper = d_res$CI_high
+  )
+})
+
+Chemo_Taxanen_df <- do.call(rbind, Chemo_Taxanen)
+Chemo_Taxanen_df
+```
+
+### 3.6. Cycles
+
+```{r}
+Chemo_total_cycles_exposed <- lapply(vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ total_cycles_exposed"))
+  model <- lm(formula, data = regions_select_CIP_treat_chemo)
+  summ <- summary(model)
+  
+  beta   <- summ$coefficients["total_cycles_exposed", "Estimate"]
+  se     <- summ$coefficients["total_cycles_exposed", "Std. Error"]
+  t     <- summ$coefficients["total_cycles_exposed", "t value"]
+  p      <- summ$coefficients["total_cycles_exposed", "Pr(>|t|)"]
+  df_res <- model$df.residual
+  
+  ci_beta <- confint(model)["total_cycles_exposed", ]
+  
+  d_res   <- t_to_d(t, df_error = df_res, ci = 0.95)
+  
+  data.frame(
+    Variable   = v,
+    Beta       = beta,
+    CI_lower   = ci_beta[1],
+    CI_upper   = ci_beta[2],
+    SE         = se,
+    t_value    = t,
+    P_value    = p,
+    Cohens_d   = d_res$d,
+    d_CI_lower = d_res$CI_low,
+    d_CI_upper = d_res$CI_high
+  )
+})
+
+Chemo_total_cycles_exposed_df <- do.call(rbind, Chemo_total_cycles_exposed)
+Chemo_total_cycles_exposed_df
+```
+
+## 4. Output
+
+### 4.1. FDR-correction
+
+```{r}
+# Cohort
+Cohort_PREM_df$P_FDR <- p.adjust(Cohort_PREM_df$P_value, method="fdr")
+Cohort_MA_df$P_FDR <- p.adjust(Cohort_MA_df$P_value, method="fdr")
+Cohort_MED_df$P_FDR <- p.adjust(Cohort_MED_df$P_value, method="fdr")
+
+# HC
+Cohort_PREM_df_HC$P_FDR <- p.adjust(Cohort_PREM_df_HC$P_value, method="fdr")
+Cohort_MA_df_HC$P_FDR <- p.adjust(Cohort_MA_df_HC$P_value, method="fdr")
+Cohort_MED_df_HC$P_FDR <- p.adjust(Cohort_MED_df_HC$P_value, method="fdr")
+
+# Patient
+Patient_PREM_df$P_FDR <- p.adjust(Patient_PREM_df$P_value, method="fdr")
+Patient_MD_df$P_FDR <- p.adjust(Patient_MD_df$P_value, method="fdr")
+Patient_Chemotherapy_df$P_FDR <- p.adjust(Patient_Chemotherapy_df$P_value, method="fdr")
+Patient_NoTreatment_df$P_FDR <- p.adjust(Patient_NoTreatment_df$P_value, method="fdr")
+Patient_Radiotherapy_df$P_FDR <- p.adjust(Patient_Radiotherapy_df$P_value, method="fdr")
+Patient_Surgery_df$P_FDR <- p.adjust(Patient_Surgery_df$P_value, method="fdr")
+
+# Chemo
+Chemo_GAtreatment_df$P_FDR <- p.adjust(Chemo_GAtreatment_df$P_value, method="fdr")
+Chemo_Anthracyclines_df$P_FDR <- p.adjust(Chemo_Anthracyclines_df$P_value, method="fdr")
+Chemo_Cyclophosphamide_df$P_FDR <- p.adjust(Chemo_Cyclophosphamide_df$P_value, method="fdr")
+Chemo_Platinum_df$P_FDR <- p.adjust(Chemo_Platinum_df$P_value, method="fdr")
+Chemo_Taxanen_df$P_FDR <- p.adjust(Chemo_Taxanen_df$P_value, method="fdr")
+Chemo_total_cycles_exposed_df$P_FDR <- p.adjust(Chemo_total_cycles_exposed_df$P_value, method="fdr")
+```
+
+### 4.2. Output table
+
+```{r}
+all_results <- bind_rows(
+  list(
+    Cohort_Prematurity                 = Cohort_PREM_df,
+    Cohort_MatAgeBirth                 = Cohort_MA_df,
+    Cohort_MatEducation                 = Cohort_MED_df,
+    Patient_Prematurity                = Patient_PREM_df,
+    Patient_MatDeath               = Patient_MD_df,
+    Patient_Chemotherapy      = Patient_Chemotherapy_df,
+    Patient_NoTreatment      = Patient_NoTreatment_df,
+    Patient_Radiotherapy      = Patient_Radiotherapy_df,
+    Patient_Surgery          = Patient_Surgery_df,
+    Chemo_GAtreatment         = Chemo_GAtreatment_df,
+    Chemo_Anthracyclines     = Chemo_Anthracyclines_df,
+    Chemo_Cyclophosphamide    = Chemo_Cyclophosphamide_df,
+    Chemo_Platinum        = Chemo_Platinum_df,
+    Chemo_Taxanen             = Chemo_Taxanen_df,
+    Chemo_total_cycles_exposed= Chemo_total_cycles_exposed_df
+  ),
+  .id = "Risk_Factor"
+)
+
+cohort_results <- bind_rows(
+  list(
+    Cohort_Prematurity                 = Cohort_PREM_df,
+    Cohort_MatAgeBirth                 = Cohort_MA_df,
+    Cohort_MatEducation                 = Cohort_MED_df
+  ),
+  .id = "Risk_Factor"
+)
+
+patient_results <- bind_rows(
+  list(
+    Patient_Prematurity                = Patient_PREM_df,
+    Patient_MatDeath               = Patient_MD_df,
+    Patient_Chemotherapy      = Patient_Chemotherapy_df,
+    Patient_NoTreatment      = Patient_NoTreatment_df,
+    Patient_Radiotherapy      = Patient_Radiotherapy_df,
+    Patient_Surgery          = Patient_Surgery_df
+  ),
+  .id = "Risk_Factor"
+)
+
+chemo_results <- bind_rows(
+  list(
+    Chemo_GAtreatment         = Chemo_GAtreatment_df,
+    Chemo_Anthracyclines     = Chemo_Anthracyclines_df,
+    Chemo_Cyclophosphamide    = Chemo_Cyclophosphamide_df,
+    Chemo_Platinum        = Chemo_Platinum_df,
+    Chemo_Taxanen             = Chemo_Taxanen_df,
+    Chemo_total_cycles_exposed= Chemo_total_cycles_exposed_df
+  ),
+  .id = "Risk_Factor"
+)
+```
+
+```{r}
+significant_results <- all_results[all_results$P_value<0.05,]
+```
+
+```{r}
+# Cohort
+write.csv(Cohort_PREM_df,                  "Results/Risk_Factors/Cohort_Prematurity.csv")
+write.csv(Cohort_MA_df,                  "Results/Risk_Factors/Cohort_MatAge.csv")
+write.csv(Cohort_MED_df,                  "Results/Risk_Factors/Cohort_MatEducation.csv")
+
+# HC
+write.csv(Cohort_PREM_df_HC,                  "Results/Risk_Factors/HC_Prematurity.csv")
+write.csv(Cohort_MA_df_HC,                  "Results/Risk_Factors/HC_MatAge.csv")
+write.csv(Cohort_MED_df_HC,                  "Results/Risk_Factors/HC_MatEducation.csv")
+
+# Patient
+write.csv(Patient_PREM_df,                 "Results/Risk_Factors/Patient_Prematurity.csv")
+write.csv(Patient_MD_df,                 "Results/Risk_Factors/Patient_MatDeath.csv")
+write.csv(Patient_Chemotherapy_df,       "Results/Risk_Factors/Patient_Chemotherapy.csv")
+write.csv(Patient_NoTreatment_df,        "Results/Risk_Factors/Patient_NoTreatment.csv")
+write.csv(Patient_Radiotherapy_df,       "Results/Risk_Factors/Patient_Radiotherapy.csv")
+write.csv(Patient_Surgery_df,            "Results/Risk_Factors/Patient_Surgery.csv")
+
+# Chemo
+write.csv(Chemo_GAtreatment_df,          "Results/Risk_Factors/Chemo_GAtreatment.csv")
+write.csv(Chemo_Anthracyclines_df,       "Results/Risk_Factors/Chemo_Anthracyclines.csv")
+write.csv(Chemo_Cyclophosphamide_df,     "Results/Risk_Factors/Chemo_Cyclophosphamide.csv")
+write.csv(Chemo_Platinum_df,             "Results/Risk_Factors/Chemo_Platinum.csv")
+write.csv(Chemo_Taxanen_df,              "Results/Risk_Factors/Chemo_Taxanen.csv")
+write.csv(Chemo_total_cycles_exposed_df, "Results/Risk_Factors/Chemo_total_cycles_exposed.csv")
+
+# Combined
+write.csv(all_results,"Results/Risk_Factors/Complete_results.csv")
+write.csv(significant_results,"Results/Risk_Factors/SignificantOnly_results.csv")
+write.csv(cohort_results,"Results/Risk_Factors/Cohort_results.csv")
+write.csv(patient_results,"Results/Risk_Factors/Patient_results.csv")
+write.csv(chemo_results,"Results/Risk_Factors/Chemo_results.csv")
+```

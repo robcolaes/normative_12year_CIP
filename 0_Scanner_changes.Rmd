@@ -1,0 +1,123 @@
+---
+title: "SOCIAL"
+output: html_document
+date: "2024-06-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# SCANNER CHANGES OVER TIME
+
+## 0. Data and libraries
+
+```{r}
+library(ggplot2)
+library(MASS)
+library(corrplot)
+library(BBmisc)
+library(lmerTest)
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(viridis)
+library(ggpubr)
+library(cluster)
+library(stringr)
+library(factoextra)
+library(broom)
+library(readxl)
+library(performance)
+library(emmeans)
+library(influence.ME)
+library(rstatix)
+library(ggseg)
+library(ggseg3d)
+library(reticulate)
+```
+
+```{r}
+thickness <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Output/Thickness/zscores.csv")
+thickness <- thickness[,c("SubjectID","age","sex","group","lh_frontalpole_thickness")]
+```
+
+```{r}
+#qc <- read_xlsx("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/2_Quality_Control/1_QC_FINAL/group_T1w.xlsx")
+#qc <- qc[,c("ID","snr_total")] 
+```
+
+```{r}
+euler <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/2_Quality_Control/1_QC_FINAL/euler_numbers.txt", sep = " ")
+colnames(euler) <- c("ID","Euler_LH","Euler_RH")
+```
+
+```{r}
+MRI <- read_xlsx("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/CIP_MRI_DATA.xlsx")
+MRI <- MRI[MRI$Session=="T1",c("ID","Scan-date")]
+colnames(MRI) <- c("ID","Scan_date")
+```
+
+```{r}
+thickness <- merge(thickness,euler,by.x = "SubjectID",by.y = "ID")
+thickness <- merge(thickness,MRI,by.x = "SubjectID",by.y = "ID")
+```
+
+```{r}
+thickness$Scan_date <- as.Date(thickness$Scan_date)
+```
+
+## 1. Plot Euler over time
+
+```{r}
+events <- as.Date(c("2015-05-12", "2017-08-16",
+                     "2020-02-18", "2020-09-10", "2020-10-22", "2021-11-10",
+                     "2022-02-04", "2025-04-04", "2025-08-19"))
+
+eulerleft <- ggplot(thickness, aes(x = Scan_date, y = Euler_LH)) +
+  geom_vline(xintercept = events, linetype = "dashed", color = "darkred", alpha = 0.9) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "loess", se = TRUE, color = "blue") +
+  labs(x = "Scan date", y = "Left Euler number") +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 14, color = "black"),
+    axis.title = element_text(size = 14),
+    axis.line.x = element_line(linewidth = 0.5, color = "black"),
+    legend.text = element_text(size = 12),
+    legend.title = element_blank(),
+    strip.text = element_text(size =10,color = "black")
+  )
+eulerleft
+```
+
+```{r}
+eulerright <- ggplot(thickness, aes(x = Scan_date, y = Euler_RH)) +
+  geom_vline(xintercept = events, linetype = "dashed", color = "darkred", alpha = 0.9) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "loess", se = TRUE, color = "blue") +
+  labs(x = "Scan date", y = "Right Euler number") +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 14, color = "black"),
+    axis.title = element_text(size = 14),
+    axis.line.x = element_line(linewidth = 0.5, color = "black"),
+    legend.text = element_text(size = 12),
+    legend.title = element_blank(),
+    strip.text = element_text(size =10,color = "black")
+  )
+eulerright
+```
+
+```{r}
+ggsave(eulerleft, filename="/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Figures/Scanner_Changes/eulerleft.png",dpi=1200, width = 10, height=7)
+ggsave(eulerright, filename="/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Figures/Scanner_Changes/eulerright.png",dpi=1200, width = 10, height=7)
+```
+
+## 2. Spearman correlation
+
+```{r}
+thickness$Scan_date_numeric <- as.numeric(thickness$Scan_date)
+cor.test(thickness$Scan_date_numeric, thickness$Euler_LH, method = "spearman")
+cor.test(thickness$Scan_date_numeric, thickness$Euler_RH, method = "spearman")
+```

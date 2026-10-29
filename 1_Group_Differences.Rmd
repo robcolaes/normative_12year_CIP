@@ -1,0 +1,513 @@
+---
+title: "LOBE"
+output: html_document
+date: "2024-06-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Analysis regional z-scores
+
+## 0. Data and libraries
+
+```{r}
+library(ggplot2)
+library(MASS)
+library(corrplot)
+library(BBmisc)
+library(lmerTest)
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(viridis)
+library(ggpubr)
+library(cluster)
+library(stringr)
+library(factoextra)
+library(broom)
+library(readxl)
+library(performance)
+library(emmeans)
+library(influence.ME)
+library(rstatix)
+library(ggridges)
+library(effsize)  # for cohen.d() with confidence intervals
+```
+
+### 0.1. ADS / MDS
+
+```{r}
+global_scores <- read.csv("Output/global_deviation_scores.csv")
+```
+
+### 0.2. Lobes
+
+Also open the z-scores:
+
+```{r}
+lobes_z <- read.csv("Output/Components_Lobes/zscores.csv")
+lobes_z$group <- as.factor(lobes_z$group)
+```
+
+```{r}
+K_lobes_z <- lobes_z[,c("SubjectID","sex","group","K_left_Frontal","K_left_Occipital" ,"K_left_Parietal","K_left_Temporal","K_right_Frontal","K_right_Occipital","K_right_Parietal","K_right_Temporal")]
+
+S_lobes_z <- lobes_z[,c("SubjectID","sex","group","S_left_Frontal","S_left_Occipital" ,"S_left_Parietal","S_left_Temporal","S_right_Frontal","S_right_Occipital","S_right_Parietal","S_right_Temporal")]
+
+I_lobes_z <- lobes_z[,c("SubjectID","sex","group","I_left_Frontal","I_left_Occipital" ,"I_left_Parietal","I_left_Temporal","I_right_Frontal","I_right_Occipital","I_right_Parietal","I_right_Temporal")]
+```
+
+### 0.3. Regions
+
+Also open the z-scores:
+
+```{r}
+surface_z <- read.csv("Output/Area/zscores.csv")
+surface_z$group <- as.factor(surface_z$group)
+
+thickness_z <- read.csv("Output/Thickness/zscores.csv")
+thickness_z$group <- as.factor(thickness_z$group)
+```
+
+```{r}
+surface_z <- surface_z[,c("SubjectID", "age", "sex", "group",
+"lh_bankssts_area", "lh_caudalanteriorcingulate_area", "lh_caudalmiddlefrontal_area",
+"lh_cuneus_area", "lh_entorhinal_area", "lh_fusiform_area", "lh_inferiorparietal_area",
+"lh_inferiortemporal_area", "lh_isthmuscingulate_area", "lh_lateraloccipital_area",
+"lh_lateralorbitofrontal_area", "lh_lingual_area", "lh_medialorbitofrontal_area",
+"lh_middletemporal_area", "lh_parahippocampal_area", "lh_paracentral_area",
+"lh_parsopercularis_area", "lh_parsorbitalis_area", "lh_parstriangularis_area",
+"lh_pericalcarine_area", "lh_postcentral_area", "lh_posteriorcingulate_area",
+"lh_precentral_area", "lh_precuneus_area", "lh_rostralanteriorcingulate_area",
+"lh_rostralmiddlefrontal_area", "lh_superiorfrontal_area", "lh_superiorparietal_area",
+"lh_superiortemporal_area", "lh_supramarginal_area", "lh_frontalpole_area",
+"lh_temporalpole_area", "lh_transversetemporal_area", "lh_insula_area",
+"rh_bankssts_area", "rh_caudalanteriorcingulate_area", "rh_caudalmiddlefrontal_area",
+"rh_cuneus_area", "rh_entorhinal_area", "rh_fusiform_area", "rh_inferiorparietal_area",
+"rh_inferiortemporal_area", "rh_isthmuscingulate_area", "rh_lateraloccipital_area",
+"rh_lateralorbitofrontal_area", "rh_lingual_area", "rh_medialorbitofrontal_area",
+"rh_middletemporal_area", "rh_parahippocampal_area", "rh_paracentral_area",
+"rh_parsopercularis_area", "rh_parsorbitalis_area", "rh_parstriangularis_area",
+"rh_pericalcarine_area", "rh_postcentral_area", "rh_posteriorcingulate_area",
+"rh_precentral_area", "rh_precuneus_area", "rh_rostralanteriorcingulate_area",
+"rh_rostralmiddlefrontal_area", "rh_superiorfrontal_area", "rh_superiorparietal_area",
+"rh_superiortemporal_area", "rh_supramarginal_area", "rh_frontalpole_area",
+"rh_temporalpole_area", "rh_transversetemporal_area", "rh_insula_area"
+)]
+
+thickness_z <- thickness_z[,c("SubjectID", "age", "sex", "group",
+"lh_bankssts_thickness", "lh_caudalanteriorcingulate_thickness", "lh_caudalmiddlefrontal_thickness",
+"lh_cuneus_thickness", "lh_entorhinal_thickness", "lh_fusiform_thickness", "lh_inferiorparietal_thickness",
+"lh_inferiortemporal_thickness", "lh_isthmuscingulate_thickness", "lh_lateraloccipital_thickness",
+"lh_lateralorbitofrontal_thickness", "lh_lingual_thickness", "lh_medialorbitofrontal_thickness",
+"lh_middletemporal_thickness", "lh_parahippocampal_thickness", "lh_paracentral_thickness",
+"lh_parsopercularis_thickness", "lh_parsorbitalis_thickness", "lh_parstriangularis_thickness",
+"lh_pericalcarine_thickness", "lh_postcentral_thickness", "lh_posteriorcingulate_thickness",
+"lh_precentral_thickness", "lh_precuneus_thickness", "lh_rostralanteriorcingulate_thickness",
+"lh_rostralmiddlefrontal_thickness", "lh_superiorfrontal_thickness", "lh_superiorparietal_thickness",
+"lh_superiortemporal_thickness", "lh_supramarginal_thickness", "lh_frontalpole_thickness",
+"lh_temporalpole_thickness", "lh_transversetemporal_thickness", "lh_insula_thickness",
+"rh_bankssts_thickness", "rh_caudalanteriorcingulate_thickness", "rh_caudalmiddlefrontal_thickness",
+"rh_cuneus_thickness", "rh_entorhinal_thickness", "rh_fusiform_thickness", "rh_inferiorparietal_thickness",
+"rh_inferiortemporal_thickness", "rh_isthmuscingulate_thickness", "rh_lateraloccipital_thickness",
+"rh_lateralorbitofrontal_thickness", "rh_lingual_thickness", "rh_medialorbitofrontal_thickness",
+"rh_middletemporal_thickness", "rh_parahippocampal_thickness", "rh_paracentral_thickness",
+"rh_parsopercularis_thickness", "rh_parsorbitalis_thickness", "rh_parstriangularis_thickness",
+"rh_pericalcarine_thickness", "rh_postcentral_thickness", "rh_posteriorcingulate_thickness",
+"rh_precentral_thickness", "rh_precuneus_thickness", "rh_rostralanteriorcingulate_thickness",
+"rh_rostralmiddlefrontal_thickness", "rh_superiorfrontal_thickness", "rh_superiorparietal_thickness",
+"rh_superiortemporal_thickness", "rh_supramarginal_thickness", "rh_frontalpole_thickness",
+"rh_temporalpole_thickness", "rh_transversetemporal_thickness", "rh_insula_thickness"
+)]
+```
+
+## 1. Group differences - Global
+
+```{r}
+# Vector of variable names
+vars <- c(
+  "AverageDS"
+)
+
+add_global_row <- function(varname, data) {
+  x_C <- na.omit(data[data$group == "Patient", varname])
+  x_H <- na.omit(data[data$group == "HC", varname])  # adjust factor levels to your actual coding
+
+  d_res <- cohen.d(x_C, x_H, hedges.correction = FALSE)  # set TRUE for Hedges' g
+
+  formula <- as.formula(paste0(varname, " ~ group"))
+  model   <- lm(formula, data = data)
+  summ    <- summary(model)
+  ci      <- confint(model)
+
+  data.frame(
+    Variable      = varname,
+    CIP_mean      = mean(x_C),
+    CIP_sd        = sd(x_C),
+    HC_mean       = mean(x_H),
+    HC_sd         = sd(x_H),
+    effect_size   = as.numeric(d_res$estimate),
+    ci_lower      = d_res$conf.int[1],
+    ci_upper      = d_res$conf.int[2],
+    Beta_group    = summ$coefficients["groupPatient", "Estimate"],
+    SE_group      = summ$coefficients["groupPatient", "Std. Error"],
+    beta_ci_lower = ci["groupPatient", 1],
+    beta_ci_upper = ci["groupPatient", 2],
+    F_value       = summ$fstatistic["value"][[1]],
+    P_value       = summ$coefficients["groupPatient", "Pr(>|t|)"],
+    stringsAsFactors = FALSE
+  )
+}
+
+global_results_list <- lapply(vars, add_global_row, data = global_scores)
+global_results_df   <- do.call(rbind, global_results_list)
+
+# FDR correction
+global_results_df$FDR_p <- p.adjust(global_results_df$P_value, method = "fdr")
+
+global_results_df
+```
+
+## 2. Group differences - Lobes
+
+### 2.1. K-component
+
+```{r}
+# Vector of variable names
+vars <- c(
+  "K_left_Frontal", "K_right_Frontal",
+  "K_left_Parietal", "K_right_Parietal",
+  "K_left_Occipital", "K_right_Occipital",
+  "K_left_Temporal", "K_right_Temporal"
+)
+
+add_K_row <- function(varname, data) {
+  x_C <- na.omit(data[data$group == "Patient", varname])
+  x_H <- na.omit(data[data$group == "HC", varname])  # adjust factor levels to your actual coding
+
+  d_res <- cohen.d(x_C, x_H, hedges.correction = FALSE)  # set TRUE for Hedges' g
+
+  formula <- as.formula(paste0(varname, " ~ group"))
+  model   <- lm(formula, data = data)
+  summ    <- summary(model)
+  ci      <- confint(model)
+
+  data.frame(
+    Variable      = varname,
+    CIP_mean      = mean(x_C),
+    CIP_sd        = sd(x_C),
+    HC_mean       = mean(x_H),
+    HC_sd         = sd(x_H),
+    effect_size   = as.numeric(d_res$estimate),
+    ci_lower      = d_res$conf.int[1],
+    ci_upper      = d_res$conf.int[2],
+    Beta_group    = summ$coefficients["groupPatient", "Estimate"],
+    SE_group      = summ$coefficients["groupPatient", "Std. Error"],
+    beta_ci_lower = ci["groupPatient", 1],
+    beta_ci_upper = ci["groupPatient", 2],
+    F_value       = summ$fstatistic["value"][[1]],
+    P_value       = summ$coefficients["groupPatient", "Pr(>|t|)"],
+    stringsAsFactors = FALSE
+  )
+}
+
+K_results_list <- lapply(vars, add_K_row, data = K_lobes_z)
+K_results_df   <- do.call(rbind, K_results_list)
+
+# FDR correction
+K_results_df$FDR_p <- p.adjust(K_results_df$P_value, method = "fdr")
+
+K_results_df
+```
+
+### 2.2. S-component
+
+```{r}
+# Vector of variable names
+vars <- c(
+  "S_left_Frontal", "S_right_Frontal",
+  "S_left_Parietal", "S_right_Parietal",
+  "S_left_Occipital", "S_right_Occipital",
+  "S_left_Temporal", "S_right_Temporal"
+)
+
+add_S_row <- function(varname, data) {
+  x_C <- na.omit(data[data$group == "Patient", varname])
+  x_H <- na.omit(data[data$group == "HC", varname])  # adjust factor levels to your actual coding
+
+  d_res <- cohen.d(x_C, x_H, hedges.correction = FALSE)  # set TRUE for Hedges' g
+
+  formula <- as.formula(paste0(varname, " ~ group"))
+  model   <- lm(formula, data = data)
+  summ    <- summary(model)
+  ci      <- confint(model)
+
+  data.frame(
+    Variable      = varname,
+    CIP_mean      = mean(x_C),
+    CIP_sd        = sd(x_C),
+    HC_mean       = mean(x_H),
+    HC_sd         = sd(x_H),
+    effect_size   = as.numeric(d_res$estimate),
+    ci_lower      = d_res$conf.int[1],
+    ci_upper      = d_res$conf.int[2],
+    Beta_group    = summ$coefficients["groupPatient", "Estimate"],
+    SE_group      = summ$coefficients["groupPatient", "Std. Error"],
+    beta_ci_lower = ci["groupPatient", 1],
+    beta_ci_upper = ci["groupPatient", 2],
+    F_value       = summ$fstatistic["value"][[1]],
+    P_value       = summ$coefficients["groupPatient", "Pr(>|t|)"],
+    stringsAsFactors = FALSE
+  )
+}
+
+S_results_list <- lapply(vars, add_S_row, data = S_lobes_z)
+S_results_df   <- do.call(rbind, S_results_list)
+
+# FDR correction
+S_results_df$FDR_p <- p.adjust(S_results_df$P_value, method = "fdr")
+
+S_results_df
+```
+
+### 2.3. I-component
+
+```{r}
+# Vector of variable names
+vars <- c(
+  "I_left_Frontal", "I_right_Frontal",
+  "I_left_Parietal", "I_right_Parietal",
+  "I_left_Occipital", "I_right_Occipital",
+  "I_left_Temporal", "I_right_Temporal"
+)
+
+add_I_row <- function(varname, data) {
+  x_C <- na.omit(data[data$group == "Patient", varname])
+  x_H <- na.omit(data[data$group == "HC", varname])  # adjust factor levels to your actual coding
+
+  d_res <- cohen.d(x_C, x_H, hedges.correction = FALSE)  # set TRUE for Hedges' g
+
+  formula <- as.formula(paste0(varname, " ~ group"))
+  model   <- lm(formula, data = data)
+  summ    <- summary(model)
+  ci      <- confint(model)
+
+  data.frame(
+    Variable      = varname,
+    CIP_mean      = mean(x_C),
+    CIP_sd        = sd(x_C),
+    HC_mean       = mean(x_H),
+    HC_sd         = sd(x_H),
+    effect_size   = as.numeric(d_res$estimate),
+    ci_lower      = d_res$conf.int[1],
+    ci_upper      = d_res$conf.int[2],
+    Beta_group    = summ$coefficients["groupPatient", "Estimate"],
+    SE_group      = summ$coefficients["groupPatient", "Std. Error"],
+    beta_ci_lower = ci["groupPatient", 1],
+    beta_ci_upper = ci["groupPatient", 2],
+    F_value       = summ$fstatistic["value"][[1]],
+    P_value       = summ$coefficients["groupPatient", "Pr(>|t|)"],
+    stringsAsFactors = FALSE
+  )
+}
+
+I_results_list <- lapply(vars, add_I_row, data = I_lobes_z)
+I_results_df   <- do.call(rbind, I_results_list)
+
+# FDR correction
+I_results_df$FDR_p <- p.adjust(I_results_df$P_value, method = "fdr")
+
+I_results_df
+```
+
+## 3. Group differences - Regions
+
+### 3.1. Surface Area
+
+```{r}
+# Vector of variable names
+vars <- c("lh_bankssts_area", "lh_caudalanteriorcingulate_area", "lh_caudalmiddlefrontal_area",
+"lh_cuneus_area", "lh_entorhinal_area", "lh_fusiform_area", "lh_inferiorparietal_area",
+"lh_inferiortemporal_area", "lh_isthmuscingulate_area", "lh_lateraloccipital_area",
+"lh_lateralorbitofrontal_area", "lh_lingual_area", "lh_medialorbitofrontal_area",
+"lh_middletemporal_area", "lh_parahippocampal_area", "lh_paracentral_area",
+"lh_parsopercularis_area", "lh_parsorbitalis_area", "lh_parstriangularis_area",
+"lh_pericalcarine_area", "lh_postcentral_area", "lh_posteriorcingulate_area",
+"lh_precentral_area", "lh_precuneus_area", "lh_rostralanteriorcingulate_area",
+"lh_rostralmiddlefrontal_area", "lh_superiorfrontal_area", "lh_superiorparietal_area",
+"lh_superiortemporal_area", "lh_supramarginal_area", "lh_frontalpole_area",
+"lh_temporalpole_area", "lh_transversetemporal_area", "lh_insula_area",
+"rh_bankssts_area", "rh_caudalanteriorcingulate_area", "rh_caudalmiddlefrontal_area",
+"rh_cuneus_area", "rh_entorhinal_area", "rh_fusiform_area", "rh_inferiorparietal_area",
+"rh_inferiortemporal_area", "rh_isthmuscingulate_area", "rh_lateraloccipital_area",
+"rh_lateralorbitofrontal_area", "rh_lingual_area", "rh_medialorbitofrontal_area",
+"rh_middletemporal_area", "rh_parahippocampal_area", "rh_paracentral_area",
+"rh_parsopercularis_area", "rh_parsorbitalis_area", "rh_parstriangularis_area",
+"rh_pericalcarine_area", "rh_postcentral_area", "rh_posteriorcingulate_area",
+"rh_precentral_area", "rh_precuneus_area", "rh_rostralanteriorcingulate_area",
+"rh_rostralmiddlefrontal_area", "rh_superiorfrontal_area", "rh_superiorparietal_area",
+"rh_superiortemporal_area", "rh_supramarginal_area", "rh_frontalpole_area",
+"rh_temporalpole_area", "rh_transversetemporal_area", "rh_insula_area"
+)
+
+add_surface_row <- function(varname, data) {
+  x_C <- na.omit(data[data$group == "Patient", varname])
+  x_H <- na.omit(data[data$group == "HC", varname])  # adjust factor levels to your actual coding
+
+  d_res <- cohen.d(x_C, x_H, hedges.correction = FALSE)  # set TRUE for Hedges' g
+
+  formula <- as.formula(paste0(varname, " ~ group"))
+  model   <- lm(formula, data = data)
+  summ    <- summary(model)
+  ci      <- confint(model)
+
+  data.frame(
+    Variable      = varname,
+    CIP_mean      = mean(x_C),
+    CIP_sd        = sd(x_C),
+    HC_mean       = mean(x_H),
+    HC_sd         = sd(x_H),
+    effect_size   = as.numeric(d_res$estimate),
+    ci_lower      = d_res$conf.int[1],
+    ci_upper      = d_res$conf.int[2],
+    Beta_group    = summ$coefficients["groupPatient", "Estimate"],
+    SE_group      = summ$coefficients["groupPatient", "Std. Error"],
+    beta_ci_lower = ci["groupPatient", 1],
+    beta_ci_upper = ci["groupPatient", 2],
+    F_value       = summ$fstatistic["value"][[1]],
+    P_value       = summ$coefficients["groupPatient", "Pr(>|t|)"],
+    stringsAsFactors = FALSE
+  )
+}
+
+surface_results_list <- lapply(vars, add_surface_row, data = surface_z)
+surface_results_df   <- do.call(rbind, surface_results_list)
+
+# FDR correction
+surface_results_df$FDR_p <- p.adjust(surface_results_df$P_value, method = "fdr")
+
+surface_results_df
+```
+
+### 3.2. Thickness
+
+```{r}
+# Vector of variable names
+vars <- c("lh_bankssts_thickness", "lh_caudalanteriorcingulate_thickness", "lh_caudalmiddlefrontal_thickness",
+"lh_cuneus_thickness", "lh_entorhinal_thickness", "lh_fusiform_thickness", "lh_inferiorparietal_thickness",
+"lh_inferiortemporal_thickness", "lh_isthmuscingulate_thickness", "lh_lateraloccipital_thickness",
+"lh_lateralorbitofrontal_thickness", "lh_lingual_thickness", "lh_medialorbitofrontal_thickness",
+"lh_middletemporal_thickness", "lh_parahippocampal_thickness", "lh_paracentral_thickness",
+"lh_parsopercularis_thickness", "lh_parsorbitalis_thickness", "lh_parstriangularis_thickness",
+"lh_pericalcarine_thickness", "lh_postcentral_thickness", "lh_posteriorcingulate_thickness",
+"lh_precentral_thickness", "lh_precuneus_thickness", "lh_rostralanteriorcingulate_thickness",
+"lh_rostralmiddlefrontal_thickness", "lh_superiorfrontal_thickness", "lh_superiorparietal_thickness",
+"lh_superiortemporal_thickness", "lh_supramarginal_thickness", "lh_frontalpole_thickness",
+"lh_temporalpole_thickness", "lh_transversetemporal_thickness", "lh_insula_thickness",
+"rh_bankssts_thickness", "rh_caudalanteriorcingulate_thickness", "rh_caudalmiddlefrontal_thickness",
+"rh_cuneus_thickness", "rh_entorhinal_thickness", "rh_fusiform_thickness", "rh_inferiorparietal_thickness",
+"rh_inferiortemporal_thickness", "rh_isthmuscingulate_thickness", "rh_lateraloccipital_thickness",
+"rh_lateralorbitofrontal_thickness", "rh_lingual_thickness", "rh_medialorbitofrontal_thickness",
+"rh_middletemporal_thickness", "rh_parahippocampal_thickness", "rh_paracentral_thickness",
+"rh_parsopercularis_thickness", "rh_parsorbitalis_thickness", "rh_parstriangularis_thickness",
+"rh_pericalcarine_thickness", "rh_postcentral_thickness", "rh_posteriorcingulate_thickness",
+"rh_precentral_thickness", "rh_precuneus_thickness", "rh_rostralanteriorcingulate_thickness",
+"rh_rostralmiddlefrontal_thickness", "rh_superiorfrontal_thickness", "rh_superiorparietal_thickness",
+"rh_superiortemporal_thickness", "rh_supramarginal_thickness", "rh_frontalpole_thickness",
+"rh_temporalpole_thickness", "rh_transversetemporal_thickness", "rh_insula_thickness"
+)
+```
+
+```{r}
+add_thickness_row <- function(varname, data) {
+  x_C <- na.omit(data[data$group == "Patient", varname])
+  x_H <- na.omit(data[data$group == "HC", varname])  # adjust factor levels to your actual coding
+
+  d_res <- cohen.d(x_C, x_H, hedges.correction = FALSE)  # set TRUE for Hedges' g
+
+  formula <- as.formula(paste0(varname, " ~ group"))
+  model   <- lm(formula, data = data)
+  summ    <- summary(model)
+  ci      <- confint(model)
+
+  data.frame(
+    Variable      = varname,
+    CIP_mean      = mean(x_C),
+    CIP_sd        = sd(x_C),
+    HC_mean       = mean(x_H),
+    HC_sd         = sd(x_H),
+    effect_size   = as.numeric(d_res$estimate),
+    ci_lower      = d_res$conf.int[1],
+    ci_upper      = d_res$conf.int[2],
+    Beta_group    = summ$coefficients["groupPatient", "Estimate"],
+    SE_group      = summ$coefficients["groupPatient", "Std. Error"],
+    beta_ci_lower = ci["groupPatient", 1],
+    beta_ci_upper = ci["groupPatient", 2],
+    F_value       = summ$fstatistic["value"][[1]],
+    P_value       = summ$coefficients["groupPatient", "Pr(>|t|)"],
+    stringsAsFactors = FALSE
+  )
+}
+
+thickness_results_list <- lapply(vars, add_thickness_row, data = thickness_z)
+thickness_results_df   <- do.call(rbind, thickness_results_list)
+
+# FDR correction
+thickness_results_df$FDR_p <- p.adjust(thickness_results_df$P_value, method = "fdr")
+
+thickness_results_df
+```
+
+## 4. Output
+
+```{r}
+# Global
+write.csv(global_results_df,"Results/Group_Differences/GlobalScores_results.csv")
+
+# Lobes
+write.csv(K_results_df,"Results/Group_Differences/K_results.csv")
+write.csv(S_results_df,"Results/Group_Differences/S_results.csv")
+write.csv(I_results_df,"Results/Group_Differences/I_results.csv")
+
+# Regions
+write.csv(surface_results_df,"Results/Group_Differences/surface_results.csv")
+write.csv(thickness_results_df,"Results/Group_Differences/thickness_results.csv")
+```
+
+Significant regions table:
+
+```{r}
+K_results_df_SIGN <- K_results_df[K_results_df$P_value<0.05,]
+S_results_df_SIGN <- S_results_df[S_results_df$P_value<0.05,]
+I_results_df_SIGN <- I_results_df[I_results_df$P_value<0.05,]
+surface_results_df_SIGN <- surface_results_df[surface_results_df$P_value<0.05,]
+thickness_results_df_SIGN <- thickness_results_df[thickness_results_df$P_value<0.05,]
+
+
+ALL_SIGN <- rbind(
+  K_results_df_SIGN,
+  S_results_df_SIGN,
+  I_results_df_SIGN,
+  surface_results_df_SIGN,
+  thickness_results_df_SIGN
+)
+
+write.csv(ALL_SIGN, "Results/Group_Differences/Significant_regions_results.csv")
+```
+
+## Reviewer request - broader correction for Frontal Pole
+
+```{r}
+# BROADER FAMILY CORRECTION METHOD (correcting for thickness and surface area, rather than per outcome)
+surf_thick <- rbind(
+  surface_results_df,
+  thickness_results_df
+)
+
+
+surf_thick$P_FDR_BROAD <- p.adjust(surf_thick$P_value, method="fdr")
+```
+
+lh_frontalpole_thickness while correcting both thickness + surface area P_FDR = 0.07940421

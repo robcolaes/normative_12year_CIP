@@ -1,0 +1,279 @@
+---
+title: "SOCIAL"
+output: html_document
+date: "2024-06-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# GGSEG3D VISUALIZE
+
+## 0. Data and libraries
+
+```{r}
+library(ggplot2)
+library(MASS)
+library(corrplot)
+library(BBmisc)
+library(lmerTest)
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(viridis)
+library(ggpubr)
+library(cluster)
+library(stringr)
+library(factoextra)
+library(broom)
+library(readxl)
+library(performance)
+library(emmeans)
+library(influence.ME)
+library(rstatix)
+library(ggseg)
+library(ggseg3d)
+library(reticulate)
+```
+
+```{r}
+thickness <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Output/Thickness/zscores.csv")
+thickness <- thickness[thickness$group=="HC",]
+thickness <- thickness[,c(1:75)]
+
+surface <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Output/Area/zscores.csv")
+surface <- surface[surface$group=="HC",]
+surface <- surface[,c(1:75)]
+
+lobes <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Output/Components_Lobes/zscores.csv")
+lobes <- lobes[lobes$group=="HC",]
+```
+
+```{r}
+K_lobes <- lobes[,c("SubjectID","sex","group","K_left_Frontal","K_left_Occipital" ,"K_left_Parietal","K_left_Temporal","K_right_Frontal","K_right_Occipital","K_right_Parietal","K_right_Temporal")]
+
+S_lobes <- lobes[,c("SubjectID","sex","group","S_left_Frontal","S_left_Occipital" ,"S_left_Parietal","S_left_Temporal","S_right_Frontal","S_right_Occipital","S_right_Parietal","S_right_Temporal")]
+
+I_lobes <- lobes[,c("SubjectID","sex","group","I_left_Frontal","I_left_Occipital" ,"I_left_Parietal","I_left_Temporal","I_right_Frontal","I_right_Occipital","I_right_Parietal","I_right_Temporal")]
+```
+
+## 1. Pooled summary
+
+```{r}
+thickness_long <- thickness %>%
+  pivot_longer(
+    cols = matches("_thickness"),   # adjust
+    names_to = "region_full",
+    values_to = "z_score"
+  ) %>%
+  mutate(
+    measure     = str_extract(region_full, "thickness"),
+    hemisphere  = str_extract(region_full, "^lh|^rh"),
+    region      = str_remove(region_full, "^(lh|rh)_") %>% str_remove("_(thickness)$")
+  )
+
+thickness_summary <- thickness_long %>%
+  summarise(
+    measure = "Thickness",
+    n_regions  = n_distinct(region_full),
+    n_controls = n_distinct(SubjectID),
+    n_z        = n(),
+    mean_z     = mean(z_score, na.rm = TRUE),
+    sd_z       = sd(z_score, na.rm = TRUE),
+    pct_1.96   = mean(abs(z_score) > 1.96, na.rm = TRUE) * 100,
+    pct_2.58   = mean(abs(z_score) > 2.58, na.rm = TRUE) * 100
+  )
+```
+
+```{r}
+surface_long <- surface %>%
+  pivot_longer(
+    cols = matches("_area"),   # adjust
+    names_to = "region_full",
+    values_to = "z_score"
+  ) %>%
+  mutate(
+    measure     = str_extract(region_full, "area"),
+    hemisphere  = str_extract(region_full, "^lh|^rh"),
+    region      = str_remove(region_full, "^(lh|rh)_") %>% str_remove("_(area)$")
+  )
+
+surface_summary <- surface_long %>%
+  summarise(
+    measure = "Surface",
+    n_regions  = n_distinct(region_full),
+    n_controls = n_distinct(SubjectID),
+    n_z        = n(),
+    mean_z     = mean(z_score, na.rm = TRUE),
+    sd_z       = sd(z_score, na.rm = TRUE),
+    pct_1.96   = mean(abs(z_score) > 1.96, na.rm = TRUE) * 100,
+    pct_2.58   = mean(abs(z_score) > 2.58, na.rm = TRUE) * 100
+  )
+```
+
+```{r}
+K_lobes_long <- K_lobes %>%
+  pivot_longer(
+    cols = matches("^K_(left|right)_"),   # adjust
+    names_to = "region_full",
+    values_to = "z_score"
+  ) %>%
+  mutate(
+    measure     = str_extract(region_full, "area"),
+    hemisphere  = str_extract(region_full, "^lh|^rh"),
+    region      = str_remove(region_full, "^(lh|rh)_")
+  )
+
+K_lobes_summary <- K_lobes_long %>%
+  summarise(
+    measure = "K_lobes",
+    n_regions  = n_distinct(region_full),
+    n_controls = n_distinct(SubjectID),
+    n_z        = n(),
+    mean_z     = mean(z_score, na.rm = TRUE),
+    sd_z       = sd(z_score, na.rm = TRUE),
+    pct_1.96   = mean(abs(z_score) > 1.96, na.rm = TRUE) * 100,
+    pct_2.58   = mean(abs(z_score) > 2.58, na.rm = TRUE) * 100
+  )
+```
+
+```{r}
+I_lobes_long <- I_lobes %>%
+  pivot_longer(
+    cols = matches("^I_(left|right)_"),   # adjust
+    names_to = "region_full",
+    values_to = "z_score"
+  ) %>%
+  mutate(
+    measure     = str_extract(region_full, "area"),
+    hemisphere  = str_extract(region_full, "^lh|^rh"),
+    region      = str_remove(region_full, "^(lh|rh)_")
+  )
+
+I_lobes_summary <- I_lobes_long %>%
+  summarise(
+    measure = "I_lobes",
+    n_regions  = n_distinct(region_full),
+    n_controls = n_distinct(SubjectID),
+    n_z        = n(),
+    mean_z     = mean(z_score, na.rm = TRUE),
+    sd_z       = sd(z_score, na.rm = TRUE),
+    pct_1.96   = mean(abs(z_score) > 1.96, na.rm = TRUE) * 100,
+    pct_2.58   = mean(abs(z_score) > 2.58, na.rm = TRUE) * 100
+  )
+```
+
+```{r}
+S_lobes_long <- S_lobes %>%
+  pivot_longer(
+    cols = matches("^S_(left|right)_"),   # adjust
+    names_to = "region_full",
+    values_to = "z_score"
+  ) %>%
+  mutate(
+    measure     = str_extract(region_full, "area"),
+    hemisphere  = str_extract(region_full, "^lh|^rh"),
+    region      = str_remove(region_full, "^(lh|rh)_")
+  )
+
+S_lobes_summary <- S_lobes_long %>%
+  summarise(
+    measure = "S_lobes",
+    n_regions  = n_distinct(region_full),
+    n_controls = n_distinct(SubjectID),
+    n_z        = n(),
+    mean_z     = mean(z_score, na.rm = TRUE),
+    sd_z       = sd(z_score, na.rm = TRUE),
+    pct_1.96   = mean(abs(z_score) > 1.96, na.rm = TRUE) * 100,
+    pct_2.58   = mean(abs(z_score) > 2.58, na.rm = TRUE) * 100
+  )
+```
+
+```{r}
+pooled_summary_all <- bind_rows(
+  thickness_summary,
+  surface_summary,
+  K_lobes_summary,
+  I_lobes_summary,
+  S_lobes_summary
+)
+```
+
+## 2. Feature table
+
+```{r}
+selected_regions <- read.csv("Results/Risk_Factors/Selected_regions_z.csv")
+selected_regions <- selected_regions[selected_regions$group=="HC",]
+```
+
+```{r}
+selected <- c("lh_parstriangularis_area","lh_frontalpole_thickness","lh_lateralorbitofrontal_thickness","lh_superiorparietal_thickness","rh_caudalmiddlefrontal_thickness","rh_superiorparietal_thickness")
+
+region_summary <- selected_regions %>%
+  pivot_longer(
+    cols = all_of(selected),
+    names_to = "region_full",
+    values_to = "z_score"
+  ) %>%
+  mutate(measure = str_extract(region_full, "thickness|area")) %>%
+  group_by(region_full, measure) %>%
+  summarise(
+    n_controls = n_distinct(SubjectID),
+    mean_z     = mean(z_score, na.rm = TRUE),
+    sd_z       = sd(z_score, na.rm = TRUE),
+    pct_1.96   = mean(abs(z_score) > 1.96, na.rm = TRUE) * 100,
+    pct_2.58   = mean(abs(z_score) > 2.58, na.rm = TRUE) * 100,
+    .groups = "drop"
+  )
+```
+
+## 3. QQ plots
+
+```{r}
+selected_long <- selected_regions %>%
+  pivot_longer(
+    cols = all_of(selected),
+    names_to = "region_full",
+    values_to = "z_score"
+  )
+
+region_labels <- c("lh_frontalpole_thickness" = "Left frontal pole (CT)",
+                   "lh_lateralorbitofrontal_thickness" = "Left lateral orbitofrontal (CT)",
+                   "lh_parstriangularis_area" = "Left pars triangularis (SA)",
+                   "lh_superiorparietal_thickness" = "Left superior parietal (CT)",
+                   "rh_caudalmiddlefrontal_thickness" = "Right caudal middle frontal (CT)",
+                   "rh_superiorparietal_thickness" = "Right superior parietal (CT)")
+
+qqplots <- ggplot(selected_long, aes(sample = z_score)) +
+  stat_qq() +
+  stat_qq_line(color = "red") +
+  facet_wrap(~ region_full, ncol = 3, scales = "free", labeller = as_labeller(region_labels)) +
+  labs(
+    x = "Theoretical quantiles",
+    y = "Sample quantiles (control z-scores)"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 14, color = "black"),
+    axis.title = element_text(size = 14),
+    axis.line.x = element_line(linewidth = 0.5, color = "black"),
+    legend.text = element_text(size = 12),
+    legend.title = element_blank(),
+    strip.text = element_text(size =10,color = "black")
+  )
+qqplots 
+```
+
+## 4. Output
+
+```{r}
+write.csv(pooled_summary_all, file = "/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Results/Controls_Quality/pooled_summary.csv")
+write.csv(region_summary, file = "/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Results/Controls_Quality/selected_region_summary.csv")
+```
+
+```{r}
+ggsave(qqplots,filename="/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Figures/Controls_Quality/qqplots.png",dpi=1200, width = 10, height=7)
+
+ggsave(qqplots,filename="/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/3_BrainMonocle/1_FINAL/Figures/Controls_Quality/qqplots.pdf",dpi=1200, width = 10, height=7)
+```

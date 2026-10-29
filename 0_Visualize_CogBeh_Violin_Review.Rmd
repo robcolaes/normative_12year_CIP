@@ -1,0 +1,371 @@
+---
+title: "SOCIAL"
+output: html_document
+date: "2024-06-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Extract and explore deviation scores
+
+## 1. Data and libraries
+
+```{r}
+library(ggplot2)
+library(MASS)
+library(corrplot)
+library(BBmisc)
+library(lmerTest)
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(viridis)
+library(ggpubr)
+library(cluster)
+library(stringr)
+library(factoextra)
+library(broom)
+library(readxl)
+library(performance)
+library(emmeans)
+library(influence.ME)
+library(rstatix)
+library(ggdist)
+library(ggpattern)
+```
+
+```{r}
+global <- read.csv("Output/global_deviation_scores.csv")
+```
+
+```{r}
+global <- global[,c("SubjectID","AverageDS")]
+```
+
+Cognitive and behavioral data:
+
+```{r}
+IQ <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/4_Characteristics/Output/list_IQ.csv")
+IQ <- IQ[,c("ID","Total_IQ","VCI","PSI")]
+
+BRIEF <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/4_Characteristics/Output/list_BRIEF.csv")
+BRIEF <- BRIEF[,c("ID","Behavioral_regulation_Tscore","Metacognition_Tscore", "Global_executive_composite_Tscore")]
+
+CBCL <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/4_Characteristics/Output/list_CBCL.csv")
+```
+
+```{r}
+FINAL <- merge(global,IQ,by.x="SubjectID",by.y="ID")
+FINAL <- merge(FINAL,BRIEF,by.x="SubjectID",by.y="ID")
+FINAL <- merge(FINAL,CBCL,by.x="SubjectID",by.y="ID")
+```
+
+```{r}
+FINAL$Group <- as.factor(FINAL$Group)
+```
+
+## 2. WATERFALL PLOTS
+
+### 2.1. WISC
+
+```{r}
+FSIQ_plot <- ggplot(FINAL, aes(x = Group, y = Total_IQ, fill = Group)) +
+  # clinical threshold band + line
+  annotate("rect", xmin = -Inf, xmax = Inf, ymin = 50, ymax = 85,
+           fill = "grey50", alpha = 0.20) +
+  geom_hline(yintercept = 85, color = "black", linewidth = 1) +
+
+  # violin (distribution shape)
+  geom_violin(width = 0.8, alpha = 0.5, colour = NA, trim = FALSE) +
+
+  # boxplot (summary stats)
+  geom_boxplot(width = 0.15, outlier.shape = NA, colour = "black", alpha = 0.8) +
+
+  # individual points, jittered
+  geom_jitter(width = 0.08, size = 1.8, alpha = 0.6, shape = 21,
+              colour = "black", stroke = 0.2) +
+
+  scale_fill_manual(values = c("H" = "#a2c8e1", "C" = "#05326c")) +
+  scale_y_continuous(limits = c(50, 155)) +
+  scale_x_discrete(limits = c("C", "H"), labels = c("H" = "Control", "C" = "Study")) +
+  labs(x = NULL, y = "FSIQ", fill = "Group") +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x  = element_text(size = 18, color = "black"),
+    axis.text.y  = element_text(size = 18, color = "black"),
+    axis.title.y = element_text(size = 18, color = "black")
+  )
+FSIQ_plot
+```
+
+```{r}
+VCI_plot <- ggplot(FINAL, aes(x = Group, y = VCI, fill = Group)) +
+  # clinical threshold band + line
+  annotate("rect", xmin = -Inf, xmax = Inf, ymin = 50, ymax = 85,
+           fill = "grey50", alpha = 0.20) +
+  geom_hline(yintercept = 85, color = "black", linewidth = 1) +
+
+  # violin (distribution shape)
+  geom_violin(width = 0.8, alpha = 0.5, colour = NA, trim = FALSE) +
+
+  # boxplot (summary stats)
+  geom_boxplot(width = 0.15, outlier.shape = NA, colour = "black", alpha = 0.8) +
+
+  # individual points, jittered
+  geom_jitter(width = 0.08, size = 1.8, alpha = 0.6, shape = 21,
+              colour = "black", stroke = 0.2) +
+
+  scale_fill_manual(values = c("H" = "#a2c8e1", "C" = "#05326c")) +
+  scale_y_continuous(limits = c(50, 155)) +
+  scale_x_discrete(limits = c("C", "H"), labels = c("H" = "Control", "C" = "Study")) +
+  labs(x = NULL, y = "VCI", fill = "Group") +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x  = element_text(size = 18, color = "black"),
+    axis.text.y  = element_text(size = 18, color = "black"),
+    axis.title.y = element_text(size = 18, color = "black")
+  )
+VCI_plot
+```
+
+```{r}
+PSI_plot <- ggplot(FINAL, aes(x = Group, y = PSI, fill = Group)) +
+  # clinical threshold band + line
+  annotate("rect", xmin = -Inf, xmax = Inf, ymin = 50, ymax = 85,
+           fill = "grey50", alpha = 0.20) +
+  geom_hline(yintercept = 85, color = "black", linewidth = 1) +
+
+  # violin (distribution shape)
+  geom_violin(width = 0.8, alpha = 0.5, colour = NA, trim = FALSE) +
+
+  # boxplot (summary stats)
+  geom_boxplot(width = 0.15, outlier.shape = NA, colour = "black", alpha = 0.8) +
+
+  # individual points, jittered
+  geom_jitter(width = 0.08, size = 1.8, alpha = 0.6, shape = 21,
+              colour = "black", stroke = 0.2) +
+
+  scale_fill_manual(values = c("H" = "#a2c8e1", "C" = "#05326c")) +
+  scale_y_continuous(limits = c(50, 155)) +
+  scale_x_discrete(limits = c("C", "H"), labels = c("H" = "Control", "C" = "Study")) +
+  labs(x = NULL, y = "PSI", fill = "Group") +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x  = element_text(size = 18, color = "black"),
+    axis.text.y  = element_text(size = 18, color = "black"),
+    axis.title.y = element_text(size = 18, color = "black")
+  )
+PSI_plot
+```
+
+### 2.2. CBCL
+
+```{r}
+CBCL_int_plot <- ggplot(FINAL, aes(x = Group, y = Internalizing_Tscore, fill = Group)) +
+  # clinical threshold band + line
+  annotate("rect", xmin = -Inf, xmax = Inf, ymin = 65, ymax = 85,
+           fill = "grey50", alpha = 0.20) +
+  geom_hline(yintercept = 65, color = "black", linewidth = 1) +
+
+  # violin (distribution shape)
+  geom_violin(width = 0.8, alpha = 0.5, colour = NA, trim = FALSE) +
+
+  # boxplot (summary stats)
+  geom_boxplot(width = 0.15, outlier.shape = NA, colour = "black", alpha = 0.8) +
+
+  # individual points, jittered
+  geom_jitter(width = 0.08, size = 1.8, alpha = 0.6, shape = 21,
+              colour = "black", stroke = 0.2) +
+
+  scale_fill_manual(values = c("H" = "#a2c8e1", "C" = "#05326c")) +
+  scale_y_continuous(limits = c(20, 85)) +
+  scale_x_discrete(limits = c("C", "H"), labels = c("H" = "Control", "C" = "Study")) +
+  labs(x = NULL, y = "Internalizing problems", fill = "Group") +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x  = element_text(size = 18, color = "black"),
+    axis.text.y  = element_text(size = 18, color = "black"),
+    axis.title.y = element_text(size = 18, color = "black")
+  )
+CBCL_int_plot
+```
+
+```{r}
+CBCL_ext_plot <- ggplot(FINAL, aes(x = Group, y = Externalizing_Tscore, fill = Group)) +
+  # clinical threshold band + line
+  annotate("rect", xmin = -Inf, xmax = Inf, ymin = 65, ymax = 85,
+           fill = "grey50", alpha = 0.20) +
+  geom_hline(yintercept = 65, color = "black", linewidth = 1) +
+
+  # violin (distribution shape)
+  geom_violin(width = 0.8, alpha = 0.5, colour = NA, trim = FALSE) +
+
+  # boxplot (summary stats)
+  geom_boxplot(width = 0.15, outlier.shape = NA, colour = "black", alpha = 0.8) +
+
+  # individual points, jittered
+  geom_jitter(width = 0.08, size = 1.8, alpha = 0.6, shape = 21,
+              colour = "black", stroke = 0.2) +
+
+  scale_fill_manual(values = c("H" = "#a2c8e1", "C" = "#05326c")) +
+  scale_y_continuous(limits = c(20, 85)) +
+  scale_x_discrete(limits = c("C", "H"), labels = c("H" = "Control", "C" = "Study")) +
+  labs(x = NULL, y = "Externalizing problems", fill = "Group") +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x  = element_text(size = 18, color = "black"),
+    axis.text.y  = element_text(size = 18, color = "black"),
+    axis.title.y = element_text(size = 18, color = "black")
+  )
+CBCL_ext_plot
+```
+
+```{r}
+CBCL_tot_plot <- ggplot(FINAL, aes(x = Group, y = Total_Tscore, fill = Group)) +
+  # clinical threshold band + line
+  annotate("rect", xmin = -Inf, xmax = Inf, ymin = 65, ymax = 85,
+           fill = "grey50", alpha = 0.20) +
+  geom_hline(yintercept = 65, color = "black", linewidth = 1) +
+
+  # violin (distribution shape)
+  geom_violin(width = 0.8, alpha = 0.5, colour = NA, trim = FALSE) +
+
+  # boxplot (summary stats)
+  geom_boxplot(width = 0.15, outlier.shape = NA, colour = "black", alpha = 0.8) +
+
+  # individual points, jittered
+  geom_jitter(width = 0.08, size = 1.8, alpha = 0.6, shape = 21,
+              colour = "black", stroke = 0.2) +
+
+  scale_fill_manual(values = c("H" = "#a2c8e1", "C" = "#05326c")) +
+  scale_y_continuous(limits = c(20, 85)) +
+  scale_x_discrete(limits = c("C", "H"), labels = c("H" = "Control", "C" = "Study")) +
+  labs(x = NULL, y = "Total problems", fill = "Group") +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x  = element_text(size = 18, color = "black"),
+    axis.text.y  = element_text(size = 18, color = "black"),
+    axis.title.y = element_text(size = 18, color = "black")
+  )
+CBCL_tot_plot
+```
+
+### 2.3. BRIEF
+
+```{r}
+BRIEF_br_plot <- ggplot(FINAL, aes(x = Group, y = Behavioral_regulation_Tscore, fill = Group)) +
+  # clinical threshold band + line
+  annotate("rect", xmin = -Inf, xmax = Inf, ymin = 65, ymax = 85,
+           fill = "grey50", alpha = 0.20) +
+  geom_hline(yintercept = 65, color = "black", linewidth = 1) +
+
+  # violin (distribution shape)
+  geom_violin(width = 0.8, alpha = 0.5, colour = NA, trim = FALSE) +
+
+  # boxplot (summary stats)
+  geom_boxplot(width = 0.15, outlier.shape = NA, colour = "black", alpha = 0.8) +
+
+  # individual points, jittered
+  geom_jitter(width = 0.08, size = 1.8, alpha = 0.6, shape = 21,
+              colour = "black", stroke = 0.2) +
+
+  scale_fill_manual(values = c("H" = "#a2c8e1", "C" = "#05326c")) +
+  scale_y_continuous(limits = c(20, 85)) +
+  scale_x_discrete(limits = c("C", "H"), labels = c("H" = "Control", "C" = "Study")) +
+  labs(x = NULL, y = "Behavioral regulation index", fill = "Group") +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x  = element_text(size = 18, color = "black"),
+    axis.text.y  = element_text(size = 18, color = "black"),
+    axis.title.y = element_text(size = 18, color = "black")
+  )
+BRIEF_br_plot
+```
+
+```{r}
+BRIEF_meta_plot <- ggplot(FINAL, aes(x = Group, y = Metacognition_Tscore, fill = Group)) +
+  # clinical threshold band + line
+  annotate("rect", xmin = -Inf, xmax = Inf, ymin = 65, ymax = 85,
+           fill = "grey50", alpha = 0.20) +
+  geom_hline(yintercept = 65, color = "black", linewidth = 1) +
+
+  # violin (distribution shape)
+  geom_violin(width = 0.8, alpha = 0.5, colour = NA, trim = FALSE) +
+
+  # boxplot (summary stats)
+  geom_boxplot(width = 0.15, outlier.shape = NA, colour = "black", alpha = 0.8) +
+
+  # individual points, jittered
+  geom_jitter(width = 0.08, size = 1.8, alpha = 0.6, shape = 21,
+              colour = "black", stroke = 0.2) +
+
+  scale_fill_manual(values = c("H" = "#a2c8e1", "C" = "#05326c")) +
+  scale_y_continuous(limits = c(20, 85)) +
+  scale_x_discrete(limits = c("C", "H"), labels = c("H" = "Control", "C" = "Study")) +
+  labs(x = NULL, y = "Metacognition index", fill = "Group") +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x  = element_text(size = 18, color = "black"),
+    axis.text.y  = element_text(size = 18, color = "black"),
+    axis.title.y = element_text(size = 18, color = "black")
+  )
+BRIEF_meta_plot
+```
+
+```{r}
+BRIEF_ges_plot <- ggplot(FINAL, aes(x = Group, y = Global_executive_composite_Tscore, fill = Group)) +
+  # clinical threshold band + line
+  annotate("rect", xmin = -Inf, xmax = Inf, ymin = 65, ymax = 85,
+           fill = "grey50", alpha = 0.20) +
+  geom_hline(yintercept = 65, color = "black", linewidth = 1) +
+
+  # violin (distribution shape)
+  geom_violin(width = 0.8, alpha = 0.5, colour = NA, trim = FALSE) +
+
+  # boxplot (summary stats)
+  geom_boxplot(width = 0.15, outlier.shape = NA, colour = "black", alpha = 0.8) +
+
+  # individual points, jittered
+  geom_jitter(width = 0.08, size = 1.8, alpha = 0.6, shape = 21,
+              colour = "black", stroke = 0.2) +
+
+  scale_fill_manual(values = c("H" = "#a2c8e1", "C" = "#05326c")) +
+  scale_y_continuous(limits = c(20, 85)) +
+  scale_x_discrete(limits = c("C", "H"), labels = c("H" = "Control", "C" = "Study")) +
+  labs(x = NULL, y = "Global executive composite score", fill = "Group") +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x  = element_text(size = 18, color = "black"),
+    axis.text.y  = element_text(size = 18, color = "black"),
+    axis.title.y = element_text(size = 18, color = "black")
+  )
+BRIEF_ges_plot
+```
+
+## 3. Output
+
+```{r}
+
+ggsave(FSIQ_plot,filename="Figures/Cogn_Behav_Violin/FSIQ.png",dpi=1200)
+ggsave(VCI_plot,filename="Figures/Cogn_Behav_Violin/VCI.png",dpi=1200)
+ggsave(PSI_plot,filename="Figures/Cogn_Behav_Violin/PSI.png",dpi=1200)
+
+ggsave(CBCL_int_plot,filename="Figures/Cogn_Behav_Violin/CBCL_int.png",dpi=1200)
+ggsave(CBCL_ext_plot,filename="Figures/Cogn_Behav_Violin/CBCL_ext.png",dpi=1200)
+ggsave(CBCL_tot_plot,filename="Figures/Cogn_Behav_Violin/CBCL_tot.png",dpi=1200)
+
+ggsave(BRIEF_br_plot,filename="Figures/Cogn_Behav_Violin/BRIEF_br.png",dpi=1200)
+ggsave(BRIEF_meta_plot,filename="Figures/Cogn_Behav_Violin/BRIEF_meta.png",dpi=1200)
+ggsave(BRIEF_ges_plot,filename="Figures/Cogn_Behav_Violin/BRIEF_ges.png",dpi=1200)
+```

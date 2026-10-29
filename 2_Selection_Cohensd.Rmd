@@ -1,0 +1,184 @@
+---
+title: "LOBE"
+output: html_document
+date: "2024-06-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Selection of Regions/Lobes
+
+## 0. Data and libraries
+
+```{r}
+library(ggplot2)
+library(MASS)
+library(corrplot)
+library(BBmisc)
+library(lmerTest)
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(viridis)
+library(ggpubr)
+library(cluster)
+library(stringr)
+library(factoextra)
+library(broom)
+library(readxl)
+library(performance)
+library(emmeans)
+library(influence.ME)
+library(rstatix)
+library(ggridges)
+```
+
+Summary statistics:
+
+```{r}
+lobes_sum <- read.csv("Output/Components_Lobes/summary_statistics.csv")
+lobes_sum <- lobes_sum[c(1:16,41:48),]
+```
+
+```{r}
+surface_sum <- read.csv("Output/Area/summary_statistics.csv")
+thickness_sum <- read.csv("Output/Thickness/summary_statistics.csv")
+```
+
+```{r}
+sum_stat <- rbind(lobes_sum,surface_sum)
+sum_stat <- rbind(sum_stat,thickness_sum)
+```
+
+## 1. Cohen's D
+
+Select region with absolute threshold of 0.5
+
+```{r}
+selected_regions <- sum_stat$Region[abs(sum_stat$Patient.Cohen.s.d) > 0.5]
+```
+
+=\> 6 regions have an effect size larger than 0.5 (medium)
+
+## 2. Visualize selected regions
+
+```{r}
+surface_z <- read.csv("Output/Area/zscores.csv")
+surface_z$group <- as.factor(surface_z$group)
+thickness_z <- read.csv("Output/Thickness/zscores.csv")
+thickness_z$group <- as.factor(thickness_z$group)
+
+surface_z <- surface_z[,c("SubjectID", "age", "sex", "group","lh_parstriangularis_area")]
+thickness_z <- thickness_z[,c("SubjectID","lh_frontalpole_thickness","lh_lateralorbitofrontal_thickness","lh_superiorparietal_thickness","rh_caudalmiddlefrontal_thickness","rh_superiorparietal_thickness")]
+```
+
+```{r}
+selected_z <- merge(surface_z,thickness_z,by="SubjectID")
+```
+
+```{r}
+selected_z_long <- selected_z %>%
+  pivot_longer(
+    cols = c(5:10),
+    names_to = "Region",
+    values_to = "Zscore"
+  )
+
+mycols <- c(
+  "lh_parstriangularis_area"           = "#e40303",  # blue
+  "lh_frontalpole_thickness"           = "#ff8c00",  # bluish green
+  "lh_lateralorbitofrontal_thickness"  = "#ffed00",  # orange
+  "lh_superiorparietal_thickness"      = "#008026",  # vermillion
+  "rh_caudalmiddlefrontal_thickness"   = "#004dff", 
+  "rh_superiorparietal_thickness"      = "#750787"
+)
+```
+
+```{r}
+# Split into HC and Patient
+df_HC <- selected_z_long %>% filter(group == "HC")
+df_Patient <- selected_z_long %>% filter(group == "Patient")
+
+ridge_plot <- ggplot() +
+
+  # --- 1. HC layer (GRAY) ---
+  geom_density_ridges(
+    data = df_HC,
+    aes(
+      x = Zscore,
+      y = Region,
+      group = Region
+    ),
+    fill = "#a6c3ce",
+    color = "#a6c3ce",
+    alpha = 0.5,
+    scale = 0.9,
+    rel_min_height = 0.01
+  ) +
+
+  # --- 2. Patient layer (REGION COLOR) ---
+  geom_density_ridges(
+    data = df_Patient,
+    aes(
+      x = Zscore,
+      y = Region,
+      fill = Region,
+      color = Region,
+      group = Region
+    ),
+    alpha = 0.8,
+    scale = 0.9,
+    rel_min_height = 0.01
+  ) +
+  geom_vline(
+    xintercept = 1.96,
+    color = "darkred",
+    linewidth = 1,
+    linetype = "dashed"
+  ) +
+  geom_vline(
+    xintercept = -1.96,
+    color = "darkred",
+    linewidth = 1,
+    linetype = "dashed"
+  ) +
+
+  scale_fill_manual(values = mycols) +
+  scale_color_manual(values = mycols) +
+
+  coord_cartesian(xlim = c(-5, 5)) +
+  theme_minimal() +
+  labs(x = "Z-scores") +
+  theme(
+    legend.position = "none",
+    axis.text.x  = element_text(size = 20, colour = "black"),
+    axis.text.y  = element_text(size = 20, colour = "black"),
+    axis.title.x = element_text(size = 20, colour = "black"),
+    axis.title.y = element_blank()
+  ) +
+  scale_y_discrete(
+    limits = rev(selected_regions),
+    labels = c(
+      "lh_parstriangularis_area"           = "Left pars triangularis (SA)",
+      "lh_frontalpole_thickness"           = "Left frontal pole (CT)",
+      "lh_lateralorbitofrontal_thickness"  = "Left lateral orbitofrontal (CT)",
+      "lh_superiorparietal_thickness"      = "Left superior parietal (CT)",
+      "rh_caudalmiddlefrontal_thickness"   = "Right caudal middle frontal (CT)",
+      "rh_superiorparietal_thickness"      = "Right superior parietal (CT)"
+    )
+  )
+
+ridge_plot
+```
+
+## 3. Output
+
+```{r}
+write.csv(selected_z,"Results/Risk_Factors/Selected_regions_z.csv")
+```
+
+```{r}
+ggsave("Figures/RidgePlot/ridge_plot.png", ridge_plot, height = 12, width = 10, dpi = 1200)
+```

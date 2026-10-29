@@ -1,0 +1,351 @@
+---
+title: "SOCIAL"
+output: html_document
+date: "2024-06-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# IMPORTANT: DON'T RERUN, WILL SLIGHTLY CHANGE NUMBERS, LOAD IN OLD RESULTS!!!!
+
+## 0. Data and libraries
+
+```{r}
+library(ggplot2)
+library(MASS)
+library(corrplot)
+library(BBmisc)
+library(lmerTest)
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(viridis)
+library(ggpubr)
+library(cluster)
+library(stringr)
+library(factoextra)
+library(broom)
+library(readxl)
+library(performance)
+library(emmeans)
+library(influence.ME)
+library(rstatix)
+library(glmmTMB)
+library(glmnet)
+library(tidyverse)
+library(broom)
+library(forcats)
+```
+
+Z-scores of significant regions:
+
+```{r}
+regions <- read.csv("Results/Risk_Factors/Selected_regions_z.csv")
+global <- read.csv("Output/global_deviation_scores.csv")
+```
+
+```{r}
+global <- global[,c("SubjectID","AverageDS")]
+regions <- merge(regions,global,by="SubjectID")
+```
+
+Cognitive and behavioral data:
+
+```{r}
+IQ <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/4_Characteristics/Output/list_IQ.csv")
+IQ <- IQ[,c("ID","Total_IQ","VCI","PSI")]
+
+BRIEF <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/4_Characteristics/Output/list_BRIEF.csv")
+BRIEF <- BRIEF[,c("ID","Behavioral_regulation_Tscore","Metacognition_Tscore", "Global_executive_composite_Tscore")]
+
+CBCL <- read.csv("/Users/robcolaes/Desktop/PhD/2_CIP/Analyses/3_NormativeModelling/4_Characteristics/Output/list_CBCL.csv")
+```
+
+```{r}
+FINAL <- merge(regions,IQ,by.x="SubjectID",by.y="ID")
+FINAL <- merge(FINAL,BRIEF,by.x="SubjectID",by.y="ID")
+FINAL <- merge(FINAL,CBCL,by.x="SubjectID",by.y="ID")
+```
+
+**(!) For now, maybe only look within CIP (!)**
+
+```{r}
+FINAL <- FINAL[FINAL$Group=="C",]
+```
+
+```{r}
+#colnames(FINAL) <- c("Left Pars Triangularis (SA)","Left Frontal Pole (CT)","Left Lateral Orbitofrontal (CT)","Left Superior Parietal (CT)","Right Caudal Middle Frontal (CT)","Right Superior Parietal (CT)","Total IQ","VCI","PSI","BRIEF Behavioral regulation","BRIEF Metacognition","BRIEF Global executive composite","CBCL Internalizing problems","CBCL Externalizing problems","CBCL Total problems")
+```
+
+## 2. Elastic net regularization
+
+```{r}
+outcomes <- c("Total_IQ","PSI","VCI","Behavioral_regulation_Tscore","Metacognition_Tscore","Global_executive_composite_Tscore","Internalizing_Tscore","Externalizing_Tscore","Total_Tscore")
+```
+
+```{r}
+set.seed(123)  # fixed seed for reproducibility of alpha/lambda selection and bootstrap
+
+run_elastic_net <- function(df, outcome, alphas = seq(0,1,0.1), n_boot = 1000) {
+  df_use <- df %>%
+    select(all_of(outcome), AverageDS,
+           lh_parstriangularis_area, lh_frontalpole_thickness,
+           lh_lateralorbitofrontal_thickness, lh_superiorparietal_thickness,
+           rh_caudalmiddlefrontal_thickness, rh_superiorparietal_thickness) %>%
+    drop_na()
+
+  X <- model.matrix(
+    as.formula(paste0(outcome, " ~ AverageDS + lh_parstriangularis_area + lh_frontalpole_thickness + ",
+                      "lh_lateralorbitofrontal_thickness + lh_superiorparietal_thickness + ",
+                      "rh_caudalmiddlefrontal_thickness + rh_superiorparietal_thickness")),
+    data = df_use
+  )[,-1]
+  y <- df_use[[outcome]]
+
+  predictor_names <- c(
+    "AverageDS",
+    "lh_parstriangularis_area",
+    "lh_frontalpole_thickness",
+    "lh_lateralorbitofrontal_thickness",
+    "lh_superiorparietal_thickness",
+    "rh_caudalmiddlefrontal_thickness",
+    "rh_superiorparietal_thickness"
+  )
+
+  # Grid over alpha
+  cv_results <- lapply(alphas, function(a) {
+    cv.glmnet(X, y, alpha = a, nfolds = 10, family = "gaussian",
+              standardize = TRUE, type.measure = "mse")
+  })
+  names(cv_results) <- as.character(alphas)
+
+  # Select best alpha by min MSE
+  cv_summ <- purrr::map_df(names(cv_results), function(a) {
+    cvfit <- cv_results[[a]]
+    tibble(alpha = as.numeric(a),
+           lambda_min = cvfit$lambda.min,
+           lambda_1se = cvfit$lambda.1se,
+           cv_mse_min = min(cvfit$cvm))
+  })
+  best_row <- cv_summ %>% arrange(cv_mse_min) %>% slice(1)
+  best_alpha  <- best_row$alpha
+  best_cvfit  <- cv_results[[as.character(best_alpha)]]
+  best_lambda <- best_cvfit$lambda.min
+
+  # Final fit + apparent R^2 (in-sample variance explained, NOT cross-validated)
+  final_fit <- glmnet(X, y, alpha = best_alpha, lambda = best_lambda,
+                      family = "gaussian", standardize = TRUE)
+  r2_apparent <- final_fit$dev.ratio
+
+  coefs_raw <- broom::tidy(final_fit)
+
+  coefs <- tibble(term = predictor_names) %>%
+    left_join(coefs_raw, by = "term") %>%
+    mutate(estimate = ifelse(is.na(estimate), 0, estimate)) %>%
+    arrange(desc(abs(estimate)))
+
+  # --- Bootstrap stability check (fixed alpha/lambda from original fit) ---
+  n <- nrow(X)
+  boot_coefs <- matrix(NA, nrow = n_boot, ncol = length(predictor_names),
+                        dimnames = list(NULL, predictor_names))
+
+  for (b in 1:n_boot) {
+    idx <- sample(1:n, n, replace = TRUE)
+    X_boot <- X[idx, , drop = FALSE]
+    y_boot <- y[idx]
+
+    boot_fit <- tryCatch(
+      glmnet(X_boot, y_boot, alpha = best_alpha, lambda = best_lambda,
+             family = "gaussian", standardize = TRUE),
+      error = function(e) NULL
+    )
+
+    if (!is.null(boot_fit)) {
+      boot_tidy <- broom::tidy(boot_fit)
+      est <- setNames(rep(0, length(predictor_names)), predictor_names)
+      est[boot_tidy$term[boot_tidy$term %in% predictor_names]] <-
+        boot_tidy$estimate[boot_tidy$term %in% predictor_names]
+      boot_coefs[b, ] <- est
+    }
+  }
+
+  boot_summary <- tibble(
+    term = predictor_names,
+    selection_freq = colMeans(boot_coefs != 0, na.rm = TRUE),
+    boot_median = apply(boot_coefs, 2, median, na.rm = TRUE),
+    boot_q025 = apply(boot_coefs, 2, quantile, probs = 0.025, na.rm = TRUE),
+    boot_q975 = apply(boot_coefs, 2, quantile, probs = 0.975, na.rm = TRUE)
+  )
+
+  list(
+    outcome = outcome,
+    best_alpha = best_alpha,
+    best_lambda = best_lambda,
+    r2_apparent = as.numeric(r2_apparent),
+    coefs = coefs,
+    cv_table = cv_summ,
+    boot_summary = boot_summary
+  )
+}
+
+results_list <- lapply(outcomes, function(o) run_elastic_net(FINAL, o))
+
+# Summarize outcome models
+summary_enet <- tibble(
+  outcome = sapply(results_list, `[[`, "outcome"),
+  r2_apparent = sapply(results_list, `[[`, "r2_apparent"),
+  best_alpha = sapply(results_list, `[[`, "best_alpha"),
+  lambda      = round(sapply(results_list, `[[`, "best_lambda"), 3)
+) %>% arrange(desc(r2_apparent))
+
+# Coefficient table (unchanged structure)
+coef_table <- map_df(results_list, function(res) {
+  res$coefs %>%
+    mutate(
+      Outcome = res$outcome,
+      Estimate = round(estimate, 3),
+      Lambda = round(res$best_lambda, 3),
+      Alpha = res$best_alpha
+    ) %>%
+    select(Outcome, term, Estimate, Alpha, Lambda)
+})
+
+# New: bootstrap stability table across all outcomes
+boot_table <- map_df(results_list, function(res) {
+  res$boot_summary %>% mutate(Outcome = res$outcome) %>%
+    select(Outcome, term, selection_freq, boot_median, boot_q025, boot_q975)
+})
+
+coef_table
+boot_table
+summary_enet
+```
+
+## 3. Figures
+
+```{r}
+coef_table <- read.csv("Results/Elastic_Net_Review/all_coefficients.csv")
+```
+
+```{r}
+names_regions <- c(
+  AverageDS = "Absolute deviation burden",
+  lh_superiorparietal_thickness = "Left superior parietal (CT)",
+  rh_superiorparietal_thickness = "Right superior parietal (CT)",
+  lh_parstriangularis_area =  "Left pars triangularis (SA)",
+  lh_frontalpole_thickness =  "Left frontal pole (CT)",
+  rh_caudalmiddlefrontal_thickness = "Right caudal middle frontal (CT)",
+  lh_lateralorbitofrontal_thickness = "Left lateral orbitofrontal (CT)"
+)
+```
+
+```{r}
+lollipop_df <- coef_table %>%
+  filter(Outcome %in% c("Total_IQ", "PSI", "VCI")) %>%
+  left_join(
+    boot_table %>% rename(Outcome_orig = Outcome),
+    by = c("Outcome" = "Outcome_orig", "term")
+  ) %>%
+  mutate(
+    Outcome = recode(Outcome, "Total_IQ" = "FSIQ"),
+    term = fct_relevel(
+      term,
+      "AverageDS",
+      "lh_parstriangularis_area",
+      "lh_frontalpole_thickness",
+      "lh_lateralorbitofrontal_thickness",
+      "lh_superiorparietal_thickness",
+      "rh_caudalmiddlefrontal_thickness",
+      "rh_superiorparietal_thickness"
+    ),
+    term = fct_rev(term),
+  )
+
+lolliplot <- ggplot(lollipop_df, aes(y = term, x = Estimate, color = Outcome)) +
+  geom_vline(
+    xintercept = 0,
+    linewidth = 0.7,
+    color = "black") +
+  geom_errorbarh(
+    aes(xmin = boot_q025, xmax = boot_q975),
+    position = position_dodge(width = 0.8),
+    height = 0.3,
+    linewidth = 0.8
+  ) +
+  geom_point(
+    position = position_dodge(width = 0.8),
+    size = 4) +
+  scale_color_manual(
+    values = c(
+      "FSIQ" = "#f18701",
+      "PSI"  = "#7678ed",
+      "VCI"  = "darkred"
+    )
+  ) +
+  scale_y_discrete(labels = names_regions) +
+  labs(
+    x = "Elastic net coefficient",
+    y = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 14, color = "black"),
+    axis.title = element_text(size = 12),
+    axis.line.x = element_line(linewidth = 0.5, color = "black"),
+    legend.text = element_text(size = 12),
+    legend.title = element_blank()
+  )
+lolliplot
+```
+
+## 3. Predictor correlations
+
+```{r}
+vars_for_corr <- FINAL %>%
+  select(AverageDS,
+         lh_parstriangularis_area,
+         lh_frontalpole_thickness,
+         lh_lateralorbitofrontal_thickness,
+         lh_superiorparietal_thickness,
+         rh_caudalmiddlefrontal_thickness,
+         rh_superiorparietal_thickness) %>%
+  rename(!!!setNames(names(names_regions), names_regions))  # apply your readable labels
+
+cor_matrix <- cor(vars_for_corr, use = "pairwise.complete.obs", method = "pearson")
+round(cor_matrix, 2)
+```
+
+```{r}
+cor_long <- as.data.frame(as.table(cor_matrix))
+names(cor_long) <- c("Var1", "Var2", "Correlation")
+
+corplot <- ggplot(cor_long, aes(Var1, Var2, fill = Correlation)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(Correlation, 2)), size = 3.5) +
+  scale_fill_gradient2(low = "#0D0887", mid = "white", high = "#F00000",
+                        midpoint = 0, limits = c(-1, 1)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12, color = "black"),
+        axis.text.y = element_text(size = 12, color = "black"),
+        axis.title = element_blank(),
+        panel.grid = element_blank()) +
+  labs(fill = "r")
+corplot
+```
+
+## 4. Output
+
+```{r}
+write.csv(coef_table,"Results/Elastic_Net_Review/all_coefficients.csv")
+write.csv(summary_enet,"Results/Elastic_Net_Review/summary_results.csv")
+write.csv(boot_table,"Results/Elastic_Net_Review/bootstrapping_results.csv")
+```
+
+```{r}
+ggsave(lolliplot,filename="Figures/Elastic_Net_Review/Beta_estimates_enet.png", width = 8, height = 5, dpi=1200)
+ggsave(lolliplot,filename="Figures/Elastic_Net_Review/Beta_estimates_enet.pdf", width = 8, height = 5, dpi=1200)
+ggsave(corplot, filename="Figures/Elastic_Net_Review/Heatmap_correlations.pdf",width = 8, height = 5, dpi=1200)
+ggsave(corplot, filename="Figures/Elastic_Net_Review/Heatmap_correlations.png",width = 8, height = 5, dpi=1200)
+```

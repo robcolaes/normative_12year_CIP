@@ -1,0 +1,193 @@
+---
+title: "SOCIAL"
+output: html_document
+date: "2024-06-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Extract and explore deviation scores
+
+## 0. Data and libraries
+
+```{r}
+library(ggplot2)
+library(MASS)
+library(corrplot)
+library(BBmisc)
+library(lmerTest)
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(viridis)
+library(ggpubr)
+library(cluster)
+library(stringr)
+library(factoextra)
+library(broom)
+library(readxl)
+library(performance)
+library(emmeans)
+library(influence.ME)
+library(rstatix)
+```
+
+```{r}
+lobes <- read.csv("Output/Components_Lobes/zscores.csv")
+```
+
+```{r}
+surface <- read.csv("Output/Area/zscores.csv")
+```
+
+```{r}
+thickness <- read.csv("Output/Thickness/zscores.csv")
+```
+
+## 1. Calculation of a global deviation score
+
+```{r}
+surface_x <- surface[,c(2,8:75)]
+thickness_x <- thickness[,c(2,8:75)]
+lobes_x <- lobes[,c(2:7,11:13,17:19,23:25,29:31,35:37,41:43,47:49,53:55)]
+  
+all_z <- merge(lobes_x,surface_x, by="SubjectID")
+all_z <- merge(all_z,thickness_x, by="SubjectID")
+```
+
+```{r}
+all_z$AverageDS <- rowMeans(abs(all_z[, 7:166]))
+all_z$MedianDS <- apply(abs(all_z[, 7:166]), 1, median)
+global_score <- all_z[,c("SubjectID","age","sex","group","AverageDS","MedianDS")]
+```
+
+```{r}
+mean(global_score[global_score$group=="Patient",]$AverageDS)
+sd(global_score[global_score$group=="Patient",]$AverageDS)
+mean(global_score[global_score$group=="HC",]$AverageDS)
+sd(global_score[global_score$group=="HC",]$AverageDS)
+min(global_score$AverageDS)
+max(global_score$AverageDS)
+```
+
+## 2. Percentage of deviations per lobe
+
+```{r}
+result_lobes <- lobes %>%
+  pivot_longer(
+    cols = -c(X, SubjectID, age, sex, group, site, dataset),
+    names_to = "lobe",
+    values_to = "z"
+  ) %>%
+  group_by(lobe, group) %>%
+  summarise(
+    count_low  = sum(z <  -1.96, na.rm = TRUE),
+    count_high = sum(z >   1.96, na.rm = TRUE),
+    n = n_distinct(SubjectID),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    prop_low  = count_low  / n,
+    prop_high = count_high / n
+  ) %>%
+  pivot_wider(
+    id_cols = lobe,
+    names_from = group,
+    values_from = c(count_low, count_high, prop_low, prop_high),
+    names_sep = "_",
+    values_fill = 0
+  ) %>%
+  ungroup() %>%
+  mutate(
+    total_count_low  = rowSums(across(starts_with("count_low_"))),
+    total_count_high = rowSums(across(starts_with("count_high_"))),
+    total_prop_low   = total_count_low  / sum(n_distinct(lobes$SubjectID)),
+    total_prop_high  = total_count_high / sum(n_distinct(lobes$SubjectID))
+  )
+```
+
+```{r}
+# As we are only interested in S, K, I components
+result_lobes <- result_lobes[1:24,]
+```
+
+## 3. Percentage of deviations per region
+
+```{r}
+result_s <- surface %>%
+  pivot_longer(
+    cols = -c(X, SubjectID, age, sex, group, site, dataset),
+    names_to = "region",
+    values_to = "z"
+  ) %>%
+  group_by(region, group) %>%
+  summarise(
+    count_low  = sum(z <  -1.96, na.rm = TRUE),
+    count_high = sum(z >   1.96, na.rm = TRUE),
+    n = n_distinct(SubjectID),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    prop_low  = count_low  / n,
+    prop_high = count_high / n
+  ) %>%
+  pivot_wider(
+    id_cols = region,
+    names_from = group,
+    values_from = c(count_low, count_high, prop_low, prop_high),
+    names_sep = "_",
+    values_fill = 0
+  ) %>%
+  ungroup() %>%
+  mutate(
+    total_count_low  = rowSums(across(starts_with("count_low_"))),
+    total_count_high = rowSums(across(starts_with("count_high_"))),
+    total_prop_low   = total_count_low  / sum(n_distinct(surface$SubjectID)),
+    total_prop_high  = total_count_high / sum(n_distinct(surface$SubjectID))
+  )
+```
+
+```{r}
+result_t <- thickness %>%
+  pivot_longer(
+    cols = -c(X, SubjectID, age, sex, group, site, dataset),
+    names_to = "region",
+    values_to = "z"
+  ) %>%
+  group_by(region, group) %>%
+  summarise(
+    count_low  = sum(z <  -1.96, na.rm = TRUE),
+    count_high = sum(z >   1.96, na.rm = TRUE),
+    n = n_distinct(SubjectID),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    prop_low  = count_low  / n,
+    prop_high = count_high / n
+  ) %>%
+  pivot_wider(
+    id_cols = region,
+    names_from = group,
+    values_from = c(count_low, count_high, prop_low, prop_high),
+    names_sep = "_",
+    values_fill = 0
+  ) %>%
+  ungroup() %>%
+  mutate(
+    total_count_low  = rowSums(across(starts_with("count_low_"))),
+    total_count_high = rowSums(across(starts_with("count_high_"))),
+    total_prop_low   = total_count_low  / sum(n_distinct(thickness$SubjectID)),
+    total_prop_high  = total_count_high / sum(n_distinct(thickness$SubjectID))
+  )
+```
+
+## 4. Output to be saved
+
+```{r}
+write.csv(result_lobes,file="Output/Components_Lobes/deviations_per_lobe.csv")
+write.csv(result_s,file="Output/Area/deviations_per_region_area.csv")
+write.csv(result_t,file="Output/Thickness/deviations_per_region_thickness.csv")
+write.csv(global_score,file="Output/global_deviation_scores.csv")
+```
